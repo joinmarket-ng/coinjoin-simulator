@@ -93,6 +93,34 @@ def test_build_publish_payload_extracts_compact_metrics(tmp_path: Path) -> None:
                 "taker_deanonymized_fraction": 0.0,
                 "mean_taker_anon_set": 9.0,
             },
+            {
+                "policy_name": "baseline",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.2,
+                "taker_deanonymized_fraction": 0.75,
+                "mean_taker_anon_set": 1.3,
+            },
+            {
+                "policy_name": "baseline",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.4,
+                "taker_deanonymized_fraction": 0.85,
+                "mean_taker_anon_set": 1.1,
+            },
+            {
+                "policy_name": "recommended",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.2,
+                "taker_deanonymized_fraction": 0.0,
+                "mean_taker_anon_set": 9.0,
+            },
+            {
+                "policy_name": "recommended",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.4,
+                "taker_deanonymized_fraction": 0.0,
+                "mean_taker_anon_set": 9.0,
+            },
         ]
     }
 
@@ -203,3 +231,14 @@ def test_build_publish_payload_extracts_compact_metrics(tmp_path: Path) -> None:
     assert findings["baseline_deanon_10_probes"] == 0.88
     assert findings["daily_cost_10_probes_btc"] == 0.005
     assert findings["baseline_recovery_day_deanon_le_5pct"] == 22
+
+    # New payload keys
+    assert "individual_mitigations" in payload
+    individual = payload["individual_mitigations"]
+    assert isinstance(individual, dict)
+    assert individual["target_makers_per_coinjoin"] == 8
+
+    assert "longrun_fee0" in payload
+    longrun_fee0 = payload["longrun_fee0"]
+    assert isinstance(longrun_fee0, dict)
+    assert longrun_fee0["target_fee_sats"] == 0

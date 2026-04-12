@@ -62,90 +62,188 @@ def _format_btc(value: float) -> str:
     return f"{value:.4f} BTC/day"
 
 
-def _mitigation_chart(payload: dict[str, object]) -> str:
+# -- Chart builders ----------------------------------------------------------
+
+
+def _baseline_vulnerability_chart(payload: dict[str, object]) -> str:
+    """Baseline deanon vs evil fraction (mitigation experiments, mpc8)."""
     mitigation = _as_dict(payload.get("mitigation"))
     series = _as_dict(mitigation.get("series"))
+    baseline = _as_dict(series.get("baseline"))
 
-    color_map = {
-        "baseline": "#c7472d",
-        "max_utxos_3": "#1f7a8c",
-        "combined_full": "#1f9366",
-    }
-    name_map = {
-        "baseline": "Baseline",
-        "max_utxos_3": "Cap revealed UTXOs (max 3)",
-        "combined_full": "Combined full policy",
-    }
+    evil = _as_float_list(baseline.get("evil_fractions"))
+    deanon = _as_float_list(baseline.get("deanon"))
 
     fig = go.Figure()
-    for key in ("baseline", "max_utxos_3", "combined_full"):
-        row = _as_dict(series.get(key))
-        evil = _as_float_list(row.get("evil_fractions"))
-        deanon = _as_float_list(row.get("deanon"))
-        if not evil or not deanon:
-            continue
+    if evil and deanon:
         fig.add_trace(
             go.Scatter(
                 x=evil,
                 y=deanon,
                 mode="lines+markers",
-                name=name_map.get(key, key),
-                line={"color": color_map.get(key, "#666")},
-                marker={"size": 8},
+                name="Baseline (no mitigations)",
+                line={"color": "#c7472d", "width": 3},
+                marker={"size": 9},
+                fill="tozeroy",
+                fillcolor="rgba(199, 71, 45, 0.10)",
             )
         )
 
     fig.update_layout(
-        title="Mitigation Impact at 8 Makers/CoinJoin",
-        xaxis_title="Evil taker fraction",
+        title="Baseline: Taker Deanonymization vs Attacker Share",
+        xaxis_title="Fraction of CoinJoin rounds initiated by attacker",
+        yaxis_title="Fraction of takers fully deanonymized",
+        yaxis={"tickformat": ".0%", "range": [0, 1]},
+        xaxis={"tickformat": ".0%"},
+        template="plotly_white",
+        height=380,
+        margin={"l": 55, "r": 25, "t": 56, "b": 55},
+    )
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
+
+
+def _longrun_degradation_chart(payload: dict[str, object]) -> str:
+    """Compare 1000-round vs 5000-round baseline to show time degradation."""
+    mitigation = _as_dict(payload.get("mitigation"))
+    mit_series = _as_dict(mitigation.get("series"))
+    baseline_1k = _as_dict(mit_series.get("baseline"))
+
+    longrun_fee0 = _as_dict(payload.get("longrun_fee0"))
+    lr_series = _as_dict(longrun_fee0.get("series"))
+    baseline_5k = _as_dict(lr_series.get("baseline"))
+
+    fig = go.Figure()
+
+    evil_1k = _as_float_list(baseline_1k.get("evil_fractions"))
+    deanon_1k = _as_float_list(baseline_1k.get("deanon"))
+    if evil_1k and deanon_1k:
+        fig.add_trace(
+            go.Scatter(
+                x=evil_1k,
+                y=deanon_1k,
+                mode="lines+markers",
+                name="1,000 rounds",
+                line={"color": "#e8843c", "width": 2, "dash": "dot"},
+                marker={"size": 7},
+            )
+        )
+
+    evil_5k = _as_float_list(baseline_5k.get("evil_fractions"))
+    deanon_5k = _as_float_list(baseline_5k.get("deanon"))
+    if evil_5k and deanon_5k:
+        fig.add_trace(
+            go.Scatter(
+                x=evil_5k,
+                y=deanon_5k,
+                mode="lines+markers",
+                name="5,000 rounds (sustained)",
+                line={"color": "#c7472d", "width": 3},
+                marker={"size": 9},
+            )
+        )
+
+    fig.update_layout(
+        title="Baseline Degrades Over Time",
+        xaxis_title="Attacker fraction",
         yaxis_title="Taker deanonymization",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
-        xaxis={"tickformat": ".1f"},
+        xaxis={"tickformat": ".0%"},
         template="plotly_white",
-        height=420,
-        margin={"l": 55, "r": 25, "t": 56, "b": 50},
+        height=380,
+        margin={"l": 55, "r": 25, "t": 56, "b": 55},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
-def _longrun_chart(payload: dict[str, object]) -> str:
-    longrun = _as_dict(payload.get("longrun"))
-    series = _as_dict(longrun.get("series"))
+def _individual_mitigations_chart(payload: dict[str, object]) -> str:
+    """Show each individual mitigation's effectiveness vs baseline."""
+    individual = _as_dict(payload.get("individual_mitigations"))
+    series = _as_dict(individual.get("series"))
+
+    configs = [
+        ("baseline", "Baseline (no mitigations)", "#c7472d", "solid", 3),
+        ("initiation_500", "Initiation fee (500 sats)", "#e8843c", "dash", 2),
+        ("initiation_1000", "Initiation fee (1000 sats)", "#d4a03c", "dash", 2),
+        ("sticky", "Sticky disclosed UTXOs", "#5b8fb9", "solid", 2),
+        ("max_utxos_3", "Max 3 UTXOs per offer", "#1f7a8c", "solid", 2),
+        ("flagged", "Flagged UTXO isolation", "#2d8f6f", "solid", 2),
+    ]
 
     fig = go.Figure()
-    for key, color in (("baseline", "#c7472d"), ("recommended", "#1f9366")):
+    for key, name, color, dash, width in configs:
         row = _as_dict(series.get(key))
         evil = _as_float_list(row.get("evil_fractions"))
         deanon = _as_float_list(row.get("deanon"))
         if not evil or not deanon:
             continue
-
         fig.add_trace(
             go.Scatter(
                 x=evil,
                 y=deanon,
                 mode="lines+markers",
-                name=key.capitalize(),
-                line={"color": color, "width": 3},
-                marker={"size": 8},
+                name=name,
+                line={"color": color, "width": width, "dash": dash},
+                marker={"size": 7},
             )
         )
 
     fig.update_layout(
-        title="Sustained Attack (Fee = 500 sats)",
-        xaxis_title="Evil taker fraction",
+        title="Individual Countermeasure Effectiveness (8 Makers/CoinJoin, 1000 Rounds)",
+        xaxis_title="Attacker fraction",
+        yaxis_title="Taker deanonymization",
+        yaxis={"tickformat": ".0%", "range": [0, 0.85]},
+        xaxis={"tickformat": ".0%"},
+        template="plotly_white",
+        height=440,
+        margin={"l": 55, "r": 25, "t": 56, "b": 55},
+        legend={"orientation": "v", "yanchor": "top", "y": 0.98, "x": 0.02},
+    )
+    return str(fig.to_html(full_html=False, include_plotlyjs=False))
+
+
+def _combined_vs_baseline_chart(payload: dict[str, object]) -> str:
+    """Show recommended policy vs baseline across long-run sustained attack."""
+    longrun = _as_dict(payload.get("longrun"))
+    series = _as_dict(longrun.get("series"))
+
+    fig = go.Figure()
+    for key, name, color in (
+        ("baseline", "Baseline", "#c7472d"),
+        ("recommended", "Recommended policy", "#1f9366"),
+    ):
+        row = _as_dict(series.get(key))
+        evil = _as_float_list(row.get("evil_fractions"))
+        deanon = _as_float_list(row.get("deanon"))
+        if not evil or not deanon:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=evil,
+                y=deanon,
+                mode="lines+markers",
+                name=name,
+                line={"color": color, "width": 3},
+                marker={"size": 9},
+            )
+        )
+
+    fig.update_layout(
+        title="Sustained Attack: Baseline vs Recommended (5000 Rounds, Pre-probed)",
+        xaxis_title="Attacker fraction",
         yaxis_title="Taker deanonymization",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
-        xaxis={"tickformat": ".1f"},
+        xaxis={"tickformat": ".0%"},
         template="plotly_white",
-        height=420,
-        margin={"l": 55, "r": 25, "t": 56, "b": 50},
+        height=380,
+        margin={"l": 55, "r": 25, "t": 56, "b": 55},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def _intensity_chart(payload: dict[str, object]) -> str:
+    """Probe intensity: deanon and cost for baseline vs recommended."""
     daily = _as_dict(payload.get("daily_intensity"))
     series = _as_dict(daily.get("series"))
 
@@ -190,28 +288,32 @@ def _intensity_chart(payload: dict[str, object]) -> str:
             go.Bar(
                 x=probes,
                 y=cost,
-                name="Attacker daily cost",
-                marker={"color": "#2f557f", "opacity": 0.35},
+                name="Attacker daily cost (BTC)",
+                marker={"color": "#2f557f", "opacity": 0.30},
             ),
             secondary_y=True,
         )
 
     fig.update_layout(
-        title="Probe Intensity vs Privacy and Cost",
+        title="Probe Intensity: Privacy Impact and Attacker Cost",
         xaxis_title="Probe rounds per day",
         template="plotly_white",
-        height=430,
+        height=420,
         margin={"l": 55, "r": 55, "t": 56, "b": 50},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     fig.update_yaxes(
-        title_text="Taker deanonymization", tickformat=".0%", range=[0, 1], secondary_y=False
+        title_text="Taker deanonymization",
+        tickformat=".0%",
+        range=[0, 1],
+        secondary_y=False,
     )
     fig.update_yaxes(title_text="Daily attacker cost (BTC)", secondary_y=True)
     return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
 def _recovery_chart(payload: dict[str, object]) -> str:
+    """Recovery timeline after attack ends."""
     recovery = _as_dict(payload.get("recovery"))
     series = _as_dict(recovery.get("series"))
 
@@ -221,20 +323,9 @@ def _recovery_chart(payload: dict[str, object]) -> str:
     days = _as_float_list(baseline.get("days"))
     base_deanon = _as_float_list(baseline.get("deanon"))
     rec_deanon = _as_float_list(recommended.get("deanon"))
-    base_known = _as_float_list(baseline.get("known_live"))
-    rec_known = _as_float_list(recommended.get("known_live"))
     attack_end = _as_int(baseline.get("attack_end_day"), 0)
 
-    fig = make_subplots(
-        rows=2,
-        cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.14,
-        subplot_titles=(
-            "Taker deanonymization timeline",
-            "Known live UTXO fraction timeline",
-        ),
-    )
+    fig = go.Figure()
 
     if days and base_deanon:
         fig.add_trace(
@@ -244,9 +335,9 @@ def _recovery_chart(payload: dict[str, object]) -> str:
                 mode="lines",
                 name="Baseline",
                 line={"color": "#c7472d", "width": 3},
-            ),
-            row=1,
-            col=1,
+                fill="tozeroy",
+                fillcolor="rgba(199, 71, 45, 0.08)",
+            )
         )
     if days and rec_deanon:
         fig.add_trace(
@@ -256,96 +347,71 @@ def _recovery_chart(payload: dict[str, object]) -> str:
                 mode="lines",
                 name="Recommended",
                 line={"color": "#1f9366", "width": 3},
-            ),
-            row=1,
-            col=1,
-        )
-    if days and base_known:
-        fig.add_trace(
-            go.Scatter(
-                x=days,
-                y=base_known,
-                mode="lines",
-                name="Baseline known-live",
-                line={"color": "#c7472d", "dash": "dot"},
-                showlegend=False,
-            ),
-            row=2,
-            col=1,
-        )
-    if days and rec_known:
-        fig.add_trace(
-            go.Scatter(
-                x=days,
-                y=rec_known,
-                mode="lines",
-                name="Recommended known-live",
-                line={"color": "#1f9366", "dash": "dot"},
-                showlegend=False,
-            ),
-            row=2,
-            col=1,
+            )
         )
 
     if attack_end > 0:
-        fig.add_vline(x=attack_end, line_dash="dash", line_color="#667085", row=1, col=1)
-        fig.add_vline(x=attack_end, line_dash="dash", line_color="#667085", row=2, col=1)
+        fig.add_vline(
+            x=attack_end,
+            line_dash="dash",
+            line_color="#667085",
+            annotation_text="Attack ends",
+            annotation_position="top right",
+        )
 
-    fig.update_yaxes(title_text="Deanonymization", tickformat=".0%", range=[0, 1], row=1, col=1)
-    fig.update_yaxes(title_text="Known live UTXOs", tickformat=".0%", range=[0, 0.22], row=2, col=1)
-    fig.update_xaxes(title_text="Day", row=2, col=1)
     fig.update_layout(
-        title="Attack and Recovery Timeline (20 probes/day)",
+        title="Recovery After a 14-Day Attack (20 Probes/Day)",
+        xaxis_title="Day",
+        yaxis_title="Taker deanonymization",
+        yaxis={"tickformat": ".0%", "range": [0, 1]},
         template="plotly_white",
-        height=620,
-        margin={"l": 55, "r": 30, "t": 70, "b": 50},
+        height=400,
+        margin={"l": 55, "r": 30, "t": 56, "b": 50},
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     return str(fig.to_html(full_html=False, include_plotlyjs=False))
 
 
+# -- HTML rendering ----------------------------------------------------------
+
+
 def _render_html(payload: dict[str, object], data_href: str) -> str:
-    context = _as_dict(payload.get("context"))
     findings = _as_dict(payload.get("key_findings"))
 
     baseline_longrun = _as_float(findings.get("baseline_deanon_evil_04"))
     recommended_longrun = _as_float(findings.get("recommended_deanon_evil_04"))
     baseline_intensity = _as_float(findings.get("baseline_deanon_10_probes"))
     cost_ten = _as_float(findings.get("daily_cost_10_probes_btc"))
-    baseline_recovery_day = findings.get("baseline_recovery_day_deanon_le_5pct")
-    recommended_recovery_day = findings.get("recommended_recovery_day_deanon_le_5pct")
 
-    n_bonded = _as_int(context.get("n_bonded_profiles"), 0)
-    honest_per_day = _as_int(context.get("honest_cjs_per_day"), 0)
+    recovery = _as_dict(payload.get("recovery"))
+    rec_series = _as_dict(recovery.get("series"))
+    baseline_recovery = _as_dict(rec_series.get("baseline"))
+    recovery_day = baseline_recovery.get("recovery_day_deanon_le_5pct")
+    recovery_day_text = str(recovery_day) if recovery_day is not None else "n/a"
 
-    mitigation_baseline_06 = _as_float(findings.get("mitigation_baseline_deanon_06"))
-    mitigation_combined_06 = _as_float(findings.get("mitigation_combined_deanon_06"))
-
-    mitigation_chart = _mitigation_chart(payload)
-    longrun_chart = _longrun_chart(payload)
+    # Charts
+    baseline_chart = _baseline_vulnerability_chart(payload)
+    degradation_chart = _longrun_degradation_chart(payload)
+    individual_chart = _individual_mitigations_chart(payload)
+    combined_chart = _combined_vs_baseline_chart(payload)
     intensity_chart = _intensity_chart(payload)
     recovery_chart = _recovery_chart(payload)
 
-    generated_at = time.strftime("%Y-%m-%d %H:%M:%S")
-    recovery_baseline_text = (
-        str(baseline_recovery_day) if baseline_recovery_day is not None else "n/a"
-    )
-    recovery_recommended_text = (
-        str(recommended_recovery_day) if recommended_recovery_day is not None else "n/a"
-    )
+    generated_at = time.strftime("%Y-%m-%d")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CoinJoin Simulator Findings</title>
+  <title>CoinJoin Probing Attack: Analysis and Countermeasures</title>
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap');
 
     :root {{
       --ink: #102231;
-      --ink-soft: #2f4858;
+      --ink-soft: #3a5568;
       --accent: #1f7a8c;
       --accent-2: #1f9366;
       --warn: #c7472d;
@@ -361,227 +427,720 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
       font-family: 'IBM Plex Sans', sans-serif;
       color: var(--ink);
       background:
-        radial-gradient(1200px 420px at 95% -10%, rgba(31, 122, 140, 0.2), transparent 55%),
-        radial-gradient(1100px 460px at -20% 0%, rgba(31, 147, 102, 0.16), transparent 58%),
+        radial-gradient(1200px 420px at 95% -10%, rgba(31, 122, 140, 0.15), transparent 55%),
+        radial-gradient(1100px 460px at -20% 0%, rgba(31, 147, 102, 0.12), transparent 58%),
         linear-gradient(180deg, #f8fcff 0%, #eef6f8 100%);
-      line-height: 1.52;
+      line-height: 1.6;
+      font-size: 15.5px;
     }}
 
     .wrap {{
-      max-width: 1120px;
+      max-width: 860px;
       margin: 0 auto;
-      padding: 28px 18px 40px;
-      animation: fade-in 550ms ease-out;
+      padding: 28px 20px 60px;
     }}
 
-    @keyframes fade-in {{
-      from {{ opacity: 0; transform: translateY(8px); }}
-      to {{ opacity: 1; transform: translateY(0); }}
+    h1, h2, h3 {{
+      font-family: 'Fraunces', serif;
+      letter-spacing: 0.2px;
     }}
+
+    h1 {{
+      font-size: clamp(1.7rem, 4vw, 2.3rem);
+      margin: 0 0 8px;
+      line-height: 1.2;
+    }}
+
+    h2 {{
+      font-size: clamp(1.3rem, 3vw, 1.6rem);
+      margin: 32px 0 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }}
+
+    h3 {{
+      font-size: 1.1rem;
+      margin: 20px 0 6px;
+      color: var(--ink);
+    }}
+
+    p {{ margin: 0 0 12px; color: var(--ink-soft); }}
 
     .hero {{
-      background: linear-gradient(135deg, #102231 0%, #214d63 70%, #1f7a8c 100%);
+      background: linear-gradient(135deg, #102231 0%, #1a3d52 60%, #1f7a8c 100%);
       color: #f6fcff;
       border-radius: 14px;
-      padding: 24px;
+      padding: 28px 26px;
+      margin-bottom: 8px;
       box-shadow: 0 12px 28px rgba(18, 40, 56, 0.18);
     }}
 
-    h1, h2 {{
-      font-family: 'Fraunces', serif;
-      letter-spacing: 0.2px;
-      margin: 0;
-    }}
-
-    h1 {{ font-size: clamp(1.6rem, 4vw, 2.2rem); margin-bottom: 10px; }}
-    h2 {{ font-size: clamp(1.25rem, 3vw, 1.55rem); margin: 0 0 8px; }}
-
-    .hero p {{ margin: 0; opacity: 0.95; max-width: 860px; }}
-
-    .meta {{
-      margin-top: 14px;
-      font-size: 0.92rem;
-      opacity: 0.9;
-    }}
+    .hero p {{ color: rgba(246, 252, 255, 0.92); margin: 0 0 6px; }}
+    .hero .subtitle {{ font-size: 1.05rem; margin-bottom: 16px; max-width: 720px; }}
+    .hero .meta {{ font-size: 0.88rem; opacity: 0.75; margin-top: 12px; }}
 
     .kpis {{
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
       margin-top: 18px;
     }}
 
     .kpi {{
       background: rgba(255, 255, 255, 0.11);
-      border: 1px solid rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 10px;
-      padding: 11px 12px;
+      padding: 10px 12px;
     }}
 
     .kpi strong {{
       display: block;
-      font-size: 1.05rem;
-      margin-bottom: 2px;
-      font-weight: 600;
+      font-size: 1.15rem;
+      font-weight: 700;
     }}
 
-    .kpi span {{ font-size: 0.83rem; opacity: 0.88; }}
+    .kpi span {{ font-size: 0.8rem; opacity: 0.85; }}
+    .kpi.danger strong {{ color: #ff9b8a; }}
+    .kpi.safe strong {{ color: #8eecc0; }}
 
-    .section {{
-      margin-top: 24px;
+    .card {{
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px;
-      box-shadow: 0 4px 16px rgba(16, 34, 49, 0.06);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-top: 16px;
+      box-shadow: 0 3px 12px rgba(16, 34, 49, 0.05);
     }}
 
-    .section p {{ margin: 0 0 10px; color: var(--ink-soft); }}
+    .card p {{ margin: 0 0 10px; }}
 
     .chart {{
       background: #fff;
       border: 1px solid #e5edf2;
       border-radius: 10px;
-      padding: 6px;
+      padding: 4px;
+      margin-top: 10px;
     }}
 
-    .insights {{
-      margin-top: 24px;
-      padding: 15px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #f8fbfd;
+    .callout {{
+      background: #f0f7f4;
+      border-left: 4px solid var(--accent-2);
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin: 14px 0;
     }}
 
-    .insights ul {{ margin: 8px 0 0; padding-left: 18px; }}
-    .insights li {{ margin: 6px 0; color: var(--ink-soft); }}
-    .insights strong {{ color: var(--ink); }}
+    .callout p {{ margin: 0; color: var(--ink); }}
+
+    .callout-warn {{
+      background: #fdf4f2;
+      border-left-color: var(--warn);
+    }}
+
+    .param-table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 0.92rem;
+    }}
+
+    .param-table th {{
+      text-align: left;
+      padding: 8px 10px;
+      background: #f2f7fa;
+      border-bottom: 2px solid var(--line);
+      font-weight: 600;
+    }}
+
+    .param-table td {{
+      padding: 7px 10px;
+      border-bottom: 1px solid #eaf0f4;
+      color: var(--ink-soft);
+    }}
+
+    .param-table code {{
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.88em;
+      background: #f0f5f8;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }}
+
+    .effect-table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 0.92rem;
+    }}
+
+    .effect-table th {{
+      text-align: left;
+      padding: 8px 10px;
+      background: #f2f7fa;
+      border-bottom: 2px solid var(--line);
+      font-weight: 600;
+    }}
+
+    .effect-table td {{
+      padding: 7px 10px;
+      border-bottom: 1px solid #eaf0f4;
+      color: var(--ink-soft);
+    }}
+
+    .effect-table .effective {{ color: #1a7a4f; font-weight: 600; }}
+    .effect-table .partial {{ color: #b8860b; font-weight: 600; }}
+    .effect-table .ineffective {{ color: #c7472d; font-weight: 600; }}
+
+    .step-list {{
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      margin: 10px 0;
+    }}
+
+    .step-list li {{
+      counter-increment: step;
+      padding: 8px 0 8px 38px;
+      position: relative;
+      color: var(--ink-soft);
+      border-bottom: 1px solid #f0f4f7;
+    }}
+
+    .step-list li::before {{
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      width: 26px;
+      height: 26px;
+      line-height: 26px;
+      text-align: center;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }}
 
     .footer {{
-      margin-top: 24px;
-      font-size: 0.9rem;
-      color: #5f7482;
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 0.88rem;
+      color: #6a8090;
     }}
 
     a {{ color: var(--accent); text-decoration: none; }}
     a:hover {{ text-decoration: underline; }}
+    strong {{ color: var(--ink); }}
 
-    @media (max-width: 900px) {{
-      .kpis {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
+    @media (max-width: 700px) {{
+      .kpis {{ grid-template-columns: repeat(2, 1fr); }}
+      .wrap {{ padding: 18px 14px 40px; }}
+      .hero {{ padding: 20px 16px; }}
     }}
 
-    @media (max-width: 620px) {{
+    @media (max-width: 480px) {{
       .kpis {{ grid-template-columns: 1fr; }}
-      .wrap {{ padding: 18px 12px 26px; }}
-      .hero {{ padding: 18px; }}
-      .section {{ padding: 12px; }}
     }}
   </style>
 </head>
 <body>
   <main class="wrap">
+
+    <!-- HERO -->
     <section class="hero">
-      <h1>CoinJoin Probing Risk: Curated Findings</h1>
-      <p>
-        This publish page keeps only the highest-signal outputs from the simulator.
-        It focuses on sustained probing impact, mitigation effectiveness, attack economics,
-        and recovery behavior.
+      <h1>CoinJoin Probing Attack</h1>
+      <p class="subtitle">
+        A practical analysis of how a malicious actor can deanonymize CoinJoin
+        participants through probing, and the countermeasures that neutralize it.
       </p>
-      <div class="meta">
-        Generated {generated_at} |
-        bonded profiles: {n_bonded} |
-        honest CoinJoins/day: {honest_per_day}
-      </div>
       <div class="kpis">
-        <div class="kpi">
+        <div class="kpi danger">
           <strong>{_pct(baseline_longrun)}</strong>
-          <span>Baseline deanon at evil=0.4</span>
+          <span>Baseline deanon (40% attacker share, 5000 rounds)</span>
         </div>
-        <div class="kpi">
+        <div class="kpi safe">
           <strong>{_pct(recommended_longrun)}</strong>
-          <span>Recommended deanon at evil=0.4</span>
+          <span>Recommended policy (same conditions)</span>
         </div>
-        <div class="kpi">
+        <div class="kpi danger">
           <strong>{_pct(baseline_intensity)}</strong>
-          <span>Baseline deanon at 10 probes/day</span>
+          <span>Baseline at 10 probes/day</span>
         </div>
         <div class="kpi">
           <strong>{_format_btc(cost_ten)}</strong>
-          <span>Attacker burn at 10 probes/day</span>
+          <span>Attacker cost at 10 probes/day</span>
         </div>
+      </div>
+      <div class="meta">
+        Simulation results generated {generated_at}
       </div>
     </section>
 
-    <section class="section">
-      <h2>1) Mitigation Comparison</h2>
-      <p>
-        At 8 makers/CoinJoin, both `max_utxos_3` and `combined_full` collapse deanonymization to ~0
-        across the tested evil-fraction range, while baseline degrades sharply.
-        At evil=0.6: baseline is {_pct(mitigation_baseline_06)} vs
-        combined policy {_pct(mitigation_combined_06)}.
-      </p>
-      <div class="chart">{mitigation_chart}</div>
-    </section>
+    <!-- 1. THE PROBLEM -->
+    <h2>1. The Problem: Privacy in CoinJoin</h2>
 
-    <section class="section">
-      <h2>2) Long-Run Sustained Attack</h2>
-      <p>
-        Over long-run attack rounds with 500 sat initiation fees,
-        baseline remains highly vulnerable,
-        while the recommended policy stays flat at 0 deanonymization in this dataset.
-      </p>
-      <div class="chart">{longrun_chart}</div>
-    </section>
+    <p>
+      <strong>CoinJoin</strong> is a collaborative Bitcoin transaction where
+      multiple participants combine their inputs and outputs into a single
+      transaction. When done correctly, an outside observer cannot determine
+      which input funded which output, providing <strong>transaction
+      privacy</strong>.
+    </p>
 
-    <section class="section">
-      <h2>3) Probe Intensity Economics</h2>
+    <p>
+      In JoinMarket-style CoinJoins, there are two roles:
+    </p>
+
+    <div class="card">
       <p>
-        Privacy loss and attack cost are shown together to highlight where attacker spend grows
-        without additional privacy gains against the recommended policy.
+        <strong>Makers</strong> are always-online bots that advertise
+        offers on a public orderbook. Each maker has a wallet divided into
+        multiple <em>mixdepths</em> (separate accounts, typically 5). They
+        hold funds across these mixdepths and earn fees for participating
+        in CoinJoins. Makers are selected weighted by their
+        <em>fidelity bond</em>, a time-locked Bitcoin deposit that proves
+        commitment and makes Sybil attacks expensive.
       </p>
+      <p>
+        <strong>Takers</strong> initiate CoinJoin transactions. They select
+        makers from the orderbook, agree on a CoinJoin amount, and
+        coordinate the transaction. The taker's goal is privacy: after
+        the CoinJoin, their output should be indistinguishable from
+        the makers' outputs.
+      </p>
+      <p>
+        The <strong>anonymity set</strong> of a CoinJoin with
+        <em>N</em> makers is <em>N + 1</em>: an observer cannot tell which
+        of the N+1 equal-amount outputs belongs to the taker. A CoinJoin
+        with 8 makers gives an anonymity set of 9.
+      </p>
+    </div>
+
+    <p>
+      This works well against passive observers. But what about an
+      <strong>active attacker</strong>?
+    </p>
+
+    <!-- 2. HOW PROBING WORKS -->
+    <h2>2. How Probing Works</h2>
+
+    <p>
+      A probing attack exploits the CoinJoin negotiation protocol. Before
+      a CoinJoin transaction is signed and broadcast, makers must reveal
+      their input UTXOs to the taker. Normally this is fine because the
+      taker is honest and completes the transaction. But a
+      <strong>malicious taker</strong> can abuse this:
+    </p>
+
+    <ol class="step-list">
+      <li>
+        <strong>Probe:</strong> The attacker initiates a CoinJoin with a
+        maker, requesting the maker's maximum offer amount. The maker
+        reveals all UTXOs in their largest mixdepth. The attacker records
+        them and <strong>aborts</strong> the transaction.
+      </li>
+      <li>
+        <strong>Accumulate:</strong> The attacker repeats this with
+        many or all makers, building a database of
+        <em>known UTXOs per maker</em>.
+      </li>
+      <li>
+        <strong>Identify:</strong> When an honest taker later creates a
+        CoinJoin, the attacker observes the on-chain transaction. If any
+        input matches a known UTXO from the attacker's database, the
+        corresponding maker is <strong>identified</strong>.
+      </li>
+      <li>
+        <strong>Cascade:</strong> When a maker is identified, the attacker
+        also learns their <em>co-spent inputs</em> (other UTXOs the maker
+        contributed) and their <em>change output</em>. These new UTXOs are
+        added to the database, enabling identification in future
+        CoinJoins. The attacker's knowledge <strong>snowballs</strong>.
+      </li>
+      <li>
+        <strong>Deanonymize:</strong> If the attacker can identify all
+        N makers in a CoinJoin, the remaining unidentified output must
+        belong to the taker. The anonymity set collapses from N+1 to 1.
+        The taker is <strong>fully deanonymized</strong>.
+      </li>
+    </ol>
+
+    <h3>Existing protections and their limits</h3>
+    <p>
+      JoinMarket already has a protection against probing:
+      <strong>PoDLE</strong> (Proof of Discrete Logarithm Equivalence).
+      To initiate a CoinJoin, the taker must commit a real UTXO worth at
+      least 20% of the requested amount. Each UTXO can only be used for
+      up to 3 PoDLE commitments (to allow for honest failures). Makers
+      broadcast used commitments to each other as a blacklist.
+    </p>
+
+    <div class="callout callout-warn">
+      <p>
+        <strong>The problem:</strong> PoDLE works against casual abuse, but
+        a well-resourced attacker can probe all makers simultaneously,
+        before the blacklist propagates. Each maker is probed for their
+        maximum offer amount, revealing as many UTXOs as possible. The
+        attacker spends their PoDLE commitment UTXOs, but in return
+        they get a complete snapshot of every maker's largest
+        mixdepth. This is the attack scenario we simulate.
+      </p>
+    </div>
+
+    <!-- 3. BASELINE VULNERABILITY -->
+    <h2>3. Baseline: How Bad Is It?</h2>
+
+    <p>
+      With no additional countermeasures beyond PoDLE, the CoinJoin
+      protocol is highly vulnerable to probing. We simulate a network of
+      100 makers with realistic wallet structures sampled from the live
+      JoinMarket orderbook.
+    </p>
+
+    <div class="card">
+      <p>
+        Even at moderate attacker shares, a significant fraction of honest
+        takers are fully deanonymized. At 20% attacker share (1 in 5
+        CoinJoin rounds is a probe), roughly <strong>20% of takers lose
+        all privacy</strong>. At 40%, it reaches 32%.
+      </p>
+      <div class="chart">{baseline_chart}</div>
+    </div>
+
+    <div class="card">
+      <p>
+        It gets worse over time. Because each identification reveals more
+        UTXOs (the cascade effect), the attacker's database grows with
+        every honest CoinJoin. Over 5,000 rounds, even a 10% attacker
+        share produces <strong>45% deanonymization</strong>, up from 4%
+        in 1,000 rounds. This is the long-term steady-state risk.
+      </p>
+      <div class="chart">{degradation_chart}</div>
+    </div>
+
+    <!-- 4. COUNTERMEASURES -->
+    <h2>4. Countermeasures</h2>
+
+    <p>
+      We evaluate six countermeasures. Each addresses a different aspect
+      of the probing attack: limiting information leakage, breaking the
+      identification chain, or raising the attacker's cost.
+    </p>
+
+    <h3>4.1 Max UTXOs per offer</h3>
+    <p>
+      <strong>What it does:</strong> Caps how many UTXOs a maker reveals
+      when responding to a CoinJoin request. Instead of revealing all
+      UTXOs in their largest mixdepth (which could be 5-10 or more), the
+      maker only discloses the top <em>N</em> by value.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> The attacker learns fewer UTXOs per
+      probe. With a cap of 3, most of the maker's UTXOs remain unknown,
+      making identification in future CoinJoins much less likely.
+    </p>
+
+    <h3>4.2 Flagged UTXO isolation</h3>
+    <p>
+      <strong>What it does:</strong> UTXOs that were disclosed during a
+      failed CoinJoin negotiation (i.e., a probe) are marked as
+      <em>flagged</em>. When a flagged UTXO appears as input in a later
+      CoinJoin, it does <strong>not</strong> count as identification of
+      the maker. The flag also propagates to change outputs derived from
+      flagged UTXOs.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> It breaks the identification chain at
+      its root. Even if the attacker knows a UTXO belongs to a maker,
+      that knowledge came from a probe, so it is tainted and cannot be
+      used for identification. Only UTXOs learned through legitimate
+      channels (e.g., the maker being identified via other means) count.
+    </p>
+
+    <h3>4.3 Sticky disclosed UTXOs</h3>
+    <p>
+      <strong>What it does:</strong> After a probe (failed CoinJoin), the
+      maker remembers which UTXOs were disclosed. On subsequent probes,
+      the maker re-offers <em>the same UTXOs</em> instead of revealing
+      new ones. The sticky set clears when the UTXOs are actually spent
+      in a completed CoinJoin.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> Repeated probing of the same maker
+      yields no new information. The attacker cannot learn more by probing
+      the same maker multiple times.
+    </p>
+
+    <h3>4.4 Initiation fee</h3>
+    <p>
+      <strong>What it does:</strong> Each maker charges a fee (in sats)
+      just to start the CoinJoin negotiation, paid regardless of whether
+      the transaction completes. Both honest and malicious takers pay.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> It makes probing expensive. At 500
+      sats per maker with 100 makers, each full probe round costs 50,000
+      sats. At 10 rounds per day, the attacker spends 0.005 BTC/day.
+      However, this is purely an economic deterrent; it does
+      <strong>not reduce information leakage</strong>.
+    </p>
+
+    <h3>4.5 Merge algorithm (gradual)</h3>
+    <p>
+      <strong>What it does:</strong> Controls how makers select inputs when
+      participating in a CoinJoin. The <em>gradual</em> algorithm selects
+      the minimum UTXOs needed to cover the amount, then adds one small
+      UTXO for slow consolidation. The default algorithm uses greedy
+      largest-first with no extras.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> Fewer inputs per CoinJoin means less
+      information revealed to any observer (including the attacker) if a
+      maker is identified through other means.
+    </p>
+
+    <h3>4.6 Disclosed input policy (adaptive)</h3>
+    <p>
+      <strong>What it does:</strong> Makers track which of their UTXOs
+      the attacker has seen (disclosed UTXOs). The <em>adaptive</em>
+      policy dynamically decides whether to preferentially spend
+      disclosed or clean UTXOs based on the current backlog ratio.
+      When many UTXOs are disclosed, the maker more aggressively cycles
+      them through CoinJoins to generate fresh outputs.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> It accelerates the turnover of
+      compromised UTXOs while preserving clean ones for normal use.
+    </p>
+
+    <h3>Individual effectiveness</h3>
+    <p>
+      The chart below shows each countermeasure's standalone impact
+      against the probing attack, tested at 8 makers per CoinJoin
+      over 1,000 rounds:
+    </p>
+
+    <div class="card">
+      <div class="chart">{individual_chart}</div>
+
+      <table class="effect-table">
+        <tr>
+          <th>Countermeasure</th>
+          <th>Effect on deanonymization</th>
+          <th>Mechanism</th>
+        </tr>
+        <tr>
+          <td>Max 3 UTXOs per offer</td>
+          <td class="effective">Eliminates deanonymization</td>
+          <td>Limits information per probe</td>
+        </tr>
+        <tr>
+          <td>Flagged UTXO isolation</td>
+          <td class="effective">Eliminates deanonymization</td>
+          <td>Blocks probe-derived identification</td>
+        </tr>
+        <tr>
+          <td>Sticky disclosed UTXOs</td>
+          <td class="effective">Near-zero (&lt;0.5% at 80% evil)</td>
+          <td>Prevents repeat probing gains</td>
+        </tr>
+        <tr>
+          <td>Initiation fee (500 sats)</td>
+          <td class="ineffective">Does not reduce deanonymization</td>
+          <td>Economic cost only</td>
+        </tr>
+        <tr>
+          <td>Initiation fee (1000 sats)</td>
+          <td class="ineffective">Does not reduce deanonymization</td>
+          <td>Economic cost only</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p>
+        Three countermeasures individually eliminate or nearly eliminate
+        deanonymization: <strong>max UTXOs per offer</strong>,
+        <strong>flagged UTXO isolation</strong>, and
+        <strong>sticky disclosed UTXOs</strong>. The initiation fee is
+        important as an economic deterrent but insufficient alone.
+      </p>
+    </div>
+
+    <!-- 5. THE RECOMMENDED POLICY -->
+    <h2>5. Recommended Policy</h2>
+
+    <p>
+      Rather than relying on any single countermeasure, we combine them
+      into a defense-in-depth policy. The recommended configuration is:
+    </p>
+
+    <div class="card">
+      <table class="param-table">
+        <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+          <th>Purpose</th>
+        </tr>
+        <tr>
+          <td><code>max_utxos_per_offer</code></td>
+          <td><code>3</code></td>
+          <td>Limit information per probe</td>
+        </tr>
+        <tr>
+          <td><code>sticky_disclosed_utxos</code></td>
+          <td><code>true</code></td>
+          <td>Block repeat probing gains</td>
+        </tr>
+        <tr>
+          <td><code>flagged_utxo_isolation</code></td>
+          <td><code>true</code></td>
+          <td>Break identification chain from probes</td>
+        </tr>
+        <tr>
+          <td><code>initiation_fee_sats</code></td>
+          <td><code>500</code></td>
+          <td>Economic deterrent</td>
+        </tr>
+        <tr>
+          <td><code>merge_algorithm</code></td>
+          <td><code>gradual</code></td>
+          <td>Minimize input exposure per CoinJoin</td>
+        </tr>
+        <tr>
+          <td><code>disclosed_input_policy</code></td>
+          <td><code>adaptive</code></td>
+          <td>Cycle compromised UTXOs efficiently</td>
+        </tr>
+        <tr>
+          <td><code>n_makers_per_coinjoin</code></td>
+          <td><code>8</code></td>
+          <td>Larger anonymity set</td>
+        </tr>
+        <tr>
+          <td><code>n_mixdepths</code></td>
+          <td><code>5</code></td>
+          <td>Wallet compartmentalization</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3>Sustained attack resistance</h3>
+    <p>
+      We test the recommended policy under the harshest conditions: 5,000
+      rounds with a pre-probed attacker (every maker is probed before the
+      first honest CoinJoin, simulating the simultaneous snapshot attack).
+      The result is <strong>zero deanonymization</strong> across all
+      attacker shares, from 10% to 60%.
+    </p>
+
+    <div class="card">
+      <div class="chart">{combined_chart}</div>
+      <p>
+        The baseline reaches {_pct(baseline_longrun)} deanonymization
+        at 40% attacker share. The recommended policy stays at
+        {_pct(recommended_longrun)}.
+      </p>
+    </div>
+
+    <!-- 6. ATTACK ECONOMICS -->
+    <h2>6. Attack Economics</h2>
+
+    <p>
+      Even if an attacker is willing to spend Bitcoin on probing,
+      the combination of initiation fees and information-limiting
+      countermeasures makes the attack fruitless. The chart below
+      shows how probe intensity affects both deanonymization and
+      attacker cost over a 14-day attack window:
+    </p>
+
+    <div class="card">
       <div class="chart">{intensity_chart}</div>
-    </section>
-
-    <section class="section">
-      <h2>4) Recovery Dynamics</h2>
       <p>
-        Attack window ends at day 14. Baseline needs until day
-        {recovery_baseline_text} to recover below 5% deanonymization;
-        recommended is already below that threshold by day
-        {recovery_recommended_text}.
+        Against the baseline, even a single probe round per day achieves
+        70% deanonymization. Increasing to 50 probes/day pushes it to 97%,
+        at a cost of 0.025 BTC/day. Against the recommended policy, the
+        attacker achieves <strong>zero deanonymization regardless of
+        spend</strong>.
       </p>
-      <div class="chart">{recovery_chart}</div>
-    </section>
+    </div>
 
-    <section class="insights">
-      <h2>What Matters</h2>
-      <ul>
-        <li>
-          <strong>Baseline remains fragile:</strong>
-          sustained probing drives deanonymization into high ranges
-          even at moderate attacker share.
+    <div class="callout callout-warn">
+      <p>
+        <strong>Initiation fees alone are not enough.</strong> Even at
+        1,000 sats per maker, an attacker can still deanonymize ~56% of
+        takers at 80% evil share. Fees raise the cost but do not address
+        the fundamental information leakage. The real defense comes from
+        limiting what the attacker learns.
+      </p>
+    </div>
+
+    <!-- 7. RECOVERY -->
+    <h2>7. Recovery After an Attack</h2>
+
+    <p>
+      What happens when the attacker stops? As honest CoinJoins continue,
+      makers generate new UTXOs the attacker does not know about. The
+      attacker's database becomes stale and identification rates drop.
+    </p>
+
+    <div class="card">
+      <div class="chart">{recovery_chart}</div>
+      <p>
+        After a 14-day attack with 20 probes/day, the baseline takes
+        until approximately day {recovery_day_text} to recover below 5%
+        deanonymization. The recommended policy was never affected:
+        deanonymization stayed at 0% throughout the attack.
+      </p>
+    </div>
+
+    <!-- 8. KEY TAKEAWAYS -->
+    <h2>8. Key Takeaways</h2>
+
+    <div class="card">
+      <ol style="margin: 0; padding-left: 20px; color: var(--ink-soft);">
+        <li style="margin-bottom: 8px;">
+          <strong>CoinJoin probing is a real privacy threat.</strong>
+          Without countermeasures, a moderately resourced attacker can
+          deanonymize the majority of honest takers through the
+          information cascade from probing.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>Three countermeasures are individually effective:</strong>
+          capping UTXOs per offer, isolating flagged UTXOs, and sticky
+          disclosure each eliminate deanonymization on their own. They
+          work by limiting or poisoning the information the attacker
+          collects.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>Initiation fees are necessary but not sufficient.</strong>
+          They raise the attacker's cost but do not stop the information
+          leakage that enables deanonymization. Fees complement
+          information-limiting measures.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>The recommended policy combines all layers.</strong>
+          It achieves zero deanonymization even under sustained,
+          pre-probed, high-intensity attacks. The defense is robust
+          across all tested scenarios.
         </li>
         <li>
-          <strong>Policy controls dominate:</strong>
-          limiting disclosed UTXO exposure with combined safeguards
-          removes the observed deanonymization path in these runs.
+          <strong>Recovery is slow without mitigations.</strong>
+          After a 2-week attack ends, the baseline needs ~12 more days
+          to recover. With the recommended policy, there is nothing
+          to recover from.
         </li>
-        <li>
-          <strong>Cost alone is weak:</strong>
-          fee-based pressure increases attacker spend but does not,
-          by itself, repair baseline privacy.
-        </li>
-        <li>
-          <strong>Operationally useful:</strong>
-          the recommended settings retain near-max anonymity while
-          attacks continue in the background.
-        </li>
-      </ul>
-    </section>
+      </ol>
+    </div>
 
     <p class="footer">
-      Raw curated dataset: <a href="{data_href}">{data_href}</a>
+      Simulation source and raw data:
+      <a href="https://github.com/m0wer/coinjoin-simulator">github.com/m0wer/coinjoin-simulator</a>
+      | Curated dataset: <a href="{data_href}">{data_href}</a>
+      | Generated {generated_at}
     </p>
+
   </main>
 </body>
 </html>

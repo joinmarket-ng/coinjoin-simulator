@@ -394,7 +394,22 @@ def build_publish_payload(
     recovery_rows = _sanitize_rows(daily_map.get("recovery_timelines"))
 
     mitigation_series = build_mitigation_series(mitigation_rows)
+    individual_mitigations = build_mitigation_series(
+        mitigation_rows,
+        mitigations=(
+            "baseline",
+            "max_utxos_3",
+            "max_utxos_1",
+            "sticky",
+            "flagged",
+            "initiation_500",
+            "initiation_1000",
+            "combined_light",
+            "combined_full",
+        ),
+    )
     longrun_series = build_longrun_series(sustained_rows)
+    longrun_series_fee0 = build_longrun_series(sustained_rows, fee_sats=0)
     intensity_series = build_intensity_series(intensity_rows)
     recovery_series = build_recovery_series(recovery_rows)
     key_findings = build_key_findings(
@@ -414,9 +429,18 @@ def build_publish_payload(
             "target_mixdepths": 5,
             "series": mitigation_series,
         },
+        "individual_mitigations": {
+            "target_makers_per_coinjoin": 8,
+            "target_mixdepths": 5,
+            "series": individual_mitigations,
+        },
         "longrun": {
             "target_fee_sats": 500,
             "series": longrun_series,
+        },
+        "longrun_fee0": {
+            "target_fee_sats": 0,
+            "series": longrun_series_fee0,
         },
         "daily_intensity": {
             "series": intensity_series,

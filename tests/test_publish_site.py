@@ -75,6 +75,34 @@ def test_generate_publish_site_writes_html_and_data(tmp_path: Path) -> None:
                 "taker_deanonymized_fraction": 0.0,
                 "mean_taker_anon_set": 9.0,
             },
+            {
+                "policy_name": "baseline",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.4,
+                "taker_deanonymized_fraction": 0.85,
+                "mean_taker_anon_set": 1.1,
+            },
+            {
+                "policy_name": "baseline",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.6,
+                "taker_deanonymized_fraction": 0.92,
+                "mean_taker_anon_set": 1.0,
+            },
+            {
+                "policy_name": "recommended",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.4,
+                "taker_deanonymized_fraction": 0.0,
+                "mean_taker_anon_set": 9.0,
+            },
+            {
+                "policy_name": "recommended",
+                "initiation_fee_sats": 0,
+                "evil_taker_fraction": 0.6,
+                "taker_deanonymized_fraction": 0.0,
+                "mean_taker_anon_set": 9.0,
+            },
         ]
     }
 
@@ -173,5 +201,5 @@ def test_generate_publish_site_writes_html_and_data(tmp_path: Path) -> None:
     assert data_output_path.exists()
 
     html = output_path.read_text()
-    assert "CoinJoin Probing Risk: Curated Findings" in html
+    assert "CoinJoin Probing Attack" in html
     assert "publish_summary.json" in html
