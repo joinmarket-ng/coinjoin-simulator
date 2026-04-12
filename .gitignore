@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+.venv/
+venv/
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Local scratch space
+tmp/*
+!tmp/.gitkeep
+
+# Generated reports not kept for publish
+daily_cost_report.html
+longrun_policy_report.html
+network_report.html
+report.html
+
+# Extra experiment dumps not kept for publish
+extreme_attack_recovery_results.json
+followup_strategy_experiments.json
+merge_sustainability_results.json
+network_experiments_grid.json
+network_sweep_default.json
+
+# OS/editor noise
+.DS_Store
+.idea/
+.vscode/
