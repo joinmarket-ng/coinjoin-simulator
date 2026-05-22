@@ -104,6 +104,13 @@ def _md_to_html(md: str) -> str:
         # bold then italic
         s = re.sub(r"\*\*([^*]+?)\*\*", r"<strong>\1</strong>", s)
         s = re.sub(r"(?<!\*)\*([^*\n]+?)\*(?!\*)", r"<em>\1</em>", s)
+        # images ![alt](url) -- must run before the plain-link pass
+        # so the leading "!" is not left dangling.
+        s = re.sub(
+            r"!\[([^\]]*)\]\(([^)]+)\)",
+            r'<img src="\2" alt="\1" loading="lazy">',
+            s,
+        )
         # links [text](url)
         s = re.sub(
             r"\[([^\]]+)\]\(([^)]+)\)",
@@ -484,6 +491,11 @@ footer { margin-top: 3rem; padding-top: 1rem;
          font-size: 0.85rem; }
 @media (max-width: 700px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 480px) { .kpis { grid-template-columns: 1fr; } }
+img, svg.fig { display: block; max-width: 100%; height: auto;
+               margin: 1.2rem auto; background: #fff;
+               border: 1px solid #e0e8ee; border-radius: 6px;
+               padding: 0.4rem; box-sizing: border-box; }
+p:has(> img:only-child) { text-align: center; margin: 1.4rem 0; }
 """
 
 NAV = """
