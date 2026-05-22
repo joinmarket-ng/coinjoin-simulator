@@ -24,15 +24,6 @@ import numpy as np
 DEFAULT_ORDERBOOK_URL = "https://joinmarket-ng.sgn.space/orderbook.json"
 SATS_PER_BTC = 100_000_000
 
-MergeAlgorithm = Literal["default", "gradual", "greedy", "random"]
-DisclosedInputPolicy = Literal[
-    "ignore",
-    "all_disclosed",
-    "minimal_disclosed",
-    "avoid_disclosed",
-    "randomized",
-    "adaptive",
-]
 WalletInitMode = Literal["distributed", "seeded_depth0"]
 
 
@@ -127,31 +118,22 @@ class NetworkSimulationConfig:
     # Configurable wallet structure
     n_mixdepths: int = 5
 
-    # Mitigation: cap UTXOs revealed per probe
-    max_utxos_per_offer: int | None = None
-
-    # Mitigation: after a failed CJ/probe, keep offering the same UTXOs
-    sticky_disclosed_utxos: bool = False
-
-    # Mitigation: disclosed UTXOs and their change descendants are never spent
-    # together with equal-amount CoinJoin outputs (prevents cross-mixdepth clustering)
-    flagged_utxo_isolation: bool = False
+    # Mitigation: timed sticky offer slot. When offer_slot_size is set, each maker
+    # advertises a random subset of size N from its active mixdepth and uses ONLY
+    # those UTXOs to fill orders. The slot is sticky for a randomized lifetime
+    # drawn uniformly from [slot_ttl_min_rounds, slot_ttl_max_rounds] -- it is NOT
+    # rebuilt on probe (otherwise re-probing in a tight window would defeat it).
+    # The slot rotates when (a) its TTL expires or (b) one of its UTXOs is spent
+    # in a successful CoinJoin.
+    offer_slot_size: int | None = None
+    slot_ttl_min_rounds: int = 4
+    slot_ttl_max_rounds: int = 20
 
     # Mitigation: taker pays this fee (sats) to start the protocol with each maker
     initiation_fee_sats: int = 0
 
     # Optional setup: pre-probe every maker before normal rounds start.
     pre_probe_all_makers: bool = False
-
-    # Maker input/merge behavior controls
-    merge_algorithm: MergeAlgorithm = "default"
-    greediest_maker_fraction: float = 0.0
-    disclosed_input_policy: DisclosedInputPolicy = "ignore"
-
-    # Adaptive disclosed-input policy controls
-    adaptive_flush_base_probability: float = 0.05
-    adaptive_flush_max_probability: float = 0.35
-    adaptive_flush_backlog_target: float = 0.30
 
     # Wallet initialization controls
     wallet_init_mode: WalletInitMode = "distributed"
@@ -181,67 +163,42 @@ class NetworkSimulationConfig:
             raise ValueError("dust_threshold_sats must be positive")
         if self.n_mixdepths < 2:
             raise ValueError("n_mixdepths must be >= 2")
-        if self.max_utxos_per_offer is not None and self.max_utxos_per_offer <= 0:
-            raise ValueError("max_utxos_per_offer must be positive or None")
+        if self.offer_slot_size is not None and self.offer_slot_size <= 0:
+            raise ValueError("offer_slot_size must be positive or None")
+        if self.slot_ttl_min_rounds <= 0:
+            raise ValueError("slot_ttl_min_rounds must be positive")
+        if self.slot_ttl_max_rounds < self.slot_ttl_min_rounds:
+            raise ValueError("slot_ttl_max_rounds must be >= slot_ttl_min_rounds")
         if self.initiation_fee_sats < 0:
             raise ValueError("initiation_fee_sats must be non-negative")
-        if not (0.0 <= self.greediest_maker_fraction <= 1.0):
-            raise ValueError("greediest_maker_fraction must be in [0, 1]")
         if self.seed_depth0_min_initial_utxos <= 0:
             raise ValueError("seed_depth0_min_initial_utxos must be positive")
         if self.seed_depth0_max_initial_utxos < self.seed_depth0_min_initial_utxos:
             raise ValueError(
                 "seed_depth0_max_initial_utxos must be >= seed_depth0_min_initial_utxos"
             )
-        if self.merge_algorithm not in ("default", "gradual", "greedy", "random"):
-            raise ValueError("invalid merge_algorithm")
-        if self.disclosed_input_policy not in (
-            "ignore",
-            "all_disclosed",
-            "minimal_disclosed",
-            "avoid_disclosed",
-            "randomized",
-            "adaptive",
-        ):
-            raise ValueError("invalid disclosed_input_policy")
         if self.wallet_init_mode not in ("distributed", "seeded_depth0"):
             raise ValueError("invalid wallet_init_mode")
-        if not (0.0 <= self.adaptive_flush_base_probability <= 1.0):
-            raise ValueError("adaptive_flush_base_probability must be in [0, 1]")
-        if not (0.0 <= self.adaptive_flush_max_probability <= 1.0):
-            raise ValueError("adaptive_flush_max_probability must be in [0, 1]")
-        if self.adaptive_flush_max_probability < self.adaptive_flush_base_probability:
-            raise ValueError(
-                "adaptive_flush_max_probability must be >= adaptive_flush_base_probability"
-            )
-        if not (0.0 <= self.adaptive_flush_backlog_target <= 1.0):
-            raise ValueError("adaptive_flush_backlog_target must be in [0, 1]")
 
     @classmethod
     def recommended_policy_defaults(cls, **overrides: Any) -> NetworkSimulationConfig:
         """Create a config with recommended maker-policy defaults.
 
         These defaults target a pragmatic privacy/profit balance:
-        - moderate reveal cap
-        - sticky disclosed set
-        - adaptive disclosed-input handling
-        - gradual consolidation
+        - timed sticky slot of 3 random UTXOs from the active mixdepth, rotating
+          on a 4-20 round randomized lifetime or when a slot UTXO is spent
         - realistic seeded depth-0 wallet start
+        - modest initiation fee to make probing measurable in cost terms
         """
         base: dict[str, Any] = {
             "n_makers_per_coinjoin": 8,
             "n_mixdepths": 5,
-            "max_utxos_per_offer": 3,
-            "sticky_disclosed_utxos": True,
-            "flagged_utxo_isolation": True,
-            "merge_algorithm": "gradual",
-            "disclosed_input_policy": "adaptive",
+            "offer_slot_size": 3,
+            "slot_ttl_min_rounds": 4,
+            "slot_ttl_max_rounds": 20,
             "wallet_init_mode": "seeded_depth0",
             "seed_depth0_min_initial_utxos": 1,
             "seed_depth0_max_initial_utxos": 3,
-            "adaptive_flush_base_probability": 0.05,
-            "adaptive_flush_max_probability": 0.35,
-            "adaptive_flush_backlog_target": 0.30,
             "initiation_fee_sats": 500,
         }
         base.update(overrides)
@@ -300,9 +257,9 @@ class NetworkSimulationResult:
 
     # Mitigation/experiment metadata
     n_mixdepths: int = 5
-    max_utxos_per_offer: int | None = None
-    sticky_disclosed_utxos: bool = False
-    flagged_utxo_isolation: bool = False
+    offer_slot_size: int | None = None
+    slot_ttl_min_rounds: int = 4
+    slot_ttl_max_rounds: int = 20
     initiation_fee_sats: int = 0
 
     # Probing cost metrics (only meaningful when initiation_fee_sats > 0)
@@ -313,20 +270,17 @@ class NetworkSimulationResult:
 
     # Strategy metadata
     pre_probe_all_makers: bool = False
-    merge_algorithm: MergeAlgorithm = "default"
-    greediest_maker_fraction: float = 0.0
-    disclosed_input_policy: DisclosedInputPolicy = "ignore"
     wallet_init_mode: WalletInitMode = "distributed"
-    adaptive_flush_base_probability: float = 0.05
-    adaptive_flush_max_probability: float = 0.35
-    adaptive_flush_backlog_target: float = 0.30
 
     # Additional behavior metrics
     avg_inputs_per_maker: float = 0.0
-    avg_disclosed_inputs_used_per_maker: float = 0.0
-    disclosed_input_usage_fraction: float = 0.0
     preprobe_actions: int = 0
     preprobe_utxos: int = 0
+
+    # Top-N UTXO coverage: fraction of largest mixdepth balance captured by top-N UTXOs
+    mean_top1_utxo_coverage: float = 0.0
+    mean_top3_utxo_coverage: float = 0.0
+    mean_top5_utxo_coverage: float = 0.0
 
     def to_dict(self) -> dict[str, float | int | bool | str | None]:
         return {
@@ -355,27 +309,22 @@ class NetworkSimulationResult:
             "mean_cj_amount_btc": self.mean_cj_amount_btc,
             "std_cj_amount_btc": self.std_cj_amount_btc,
             "n_mixdepths": self.n_mixdepths,
-            "max_utxos_per_offer": self.max_utxos_per_offer,
-            "sticky_disclosed_utxos": self.sticky_disclosed_utxos,
-            "flagged_utxo_isolation": self.flagged_utxo_isolation,
+            "offer_slot_size": self.offer_slot_size,
+            "slot_ttl_min_rounds": self.slot_ttl_min_rounds,
+            "slot_ttl_max_rounds": self.slot_ttl_max_rounds,
             "initiation_fee_sats": self.initiation_fee_sats,
             "total_probing_cost_sats": self.total_probing_cost_sats,
             "total_honest_volume_sats": self.total_honest_volume_sats,
             "probing_cost_per_probe_sats": self.probing_cost_per_probe_sats,
             "probing_cost_to_volume_ratio": self.probing_cost_to_volume_ratio,
             "pre_probe_all_makers": self.pre_probe_all_makers,
-            "merge_algorithm": self.merge_algorithm,
-            "greediest_maker_fraction": self.greediest_maker_fraction,
-            "disclosed_input_policy": self.disclosed_input_policy,
             "wallet_init_mode": self.wallet_init_mode,
-            "adaptive_flush_base_probability": self.adaptive_flush_base_probability,
-            "adaptive_flush_max_probability": self.adaptive_flush_max_probability,
-            "adaptive_flush_backlog_target": self.adaptive_flush_backlog_target,
             "avg_inputs_per_maker": self.avg_inputs_per_maker,
-            "avg_disclosed_inputs_used_per_maker": self.avg_disclosed_inputs_used_per_maker,
-            "disclosed_input_usage_fraction": self.disclosed_input_usage_fraction,
             "preprobe_actions": self.preprobe_actions,
             "preprobe_utxos": self.preprobe_utxos,
+            "mean_top1_utxo_coverage": self.mean_top1_utxo_coverage,
+            "mean_top3_utxo_coverage": self.mean_top3_utxo_coverage,
+            "mean_top5_utxo_coverage": self.mean_top5_utxo_coverage,
         }
 
 
@@ -466,11 +415,9 @@ class SustainedAttackResult:
     recovery_day_deanon_le_5pct: int | None
 
     # Policy metadata
-    merge_algorithm: MergeAlgorithm = "default"
-    disclosed_input_policy: DisclosedInputPolicy = "ignore"
-    max_utxos_per_offer: int | None = None
-    sticky_disclosed_utxos: bool = False
-    flagged_utxo_isolation: bool = False
+    offer_slot_size: int | None = None
+    slot_ttl_min_rounds: int = 4
+    slot_ttl_max_rounds: int = 20
     wallet_init_mode: WalletInitMode = "distributed"
     policy_label: str = ""
 
@@ -496,11 +443,9 @@ class SustainedAttackResult:
             "attack_daily_cost_btc": self.attack_daily_cost_btc,
             "recovery_day_known_live_le_10pct": self.recovery_day_known_live_le_10pct,
             "recovery_day_deanon_le_5pct": self.recovery_day_deanon_le_5pct,
-            "merge_algorithm": self.merge_algorithm,
-            "disclosed_input_policy": self.disclosed_input_policy,
-            "max_utxos_per_offer": self.max_utxos_per_offer,
-            "sticky_disclosed_utxos": self.sticky_disclosed_utxos,
-            "flagged_utxo_isolation": self.flagged_utxo_isolation,
+            "offer_slot_size": self.offer_slot_size,
+            "slot_ttl_min_rounds": self.slot_ttl_min_rounds,
+            "slot_ttl_max_rounds": self.slot_ttl_max_rounds,
             "wallet_init_mode": self.wallet_init_mode,
             "policy_label": self.policy_label,
             "daily_snapshots": [
@@ -535,6 +480,15 @@ def fetch_orderbook_snapshot(
     with urlopen(url, timeout=timeout_seconds) as response:
         payload = response.read().decode("utf-8")
     decoded = json.loads(payload)
+    if not isinstance(decoded, dict):
+        raise ValueError("orderbook snapshot is not a JSON object")
+    return decoded
+
+
+def load_orderbook_snapshot(path: str) -> dict[str, Any]:
+    """Load a previously fetched JoinMarket orderbook snapshot from disk."""
+    with open(path, encoding="utf-8") as handle:
+        decoded = json.load(handle)
     if not isinstance(decoded, dict):
         raise ValueError("orderbook snapshot is not a JSON object")
     return decoded
@@ -590,11 +544,13 @@ def extract_bonded_maker_profiles(orderbook_data: dict[str, Any]) -> list[Bonded
 class RealisticNetworkSimulator:
     """Network simulation that tracks probing, clustering, and taker privacy.
 
-    Supports configurable mixdepth count and four mitigations:
-    - max_utxos_per_offer: cap UTXOs revealed per probe
-    - sticky_disclosed_utxos: re-offer the same UTXOs until successful CJ
-    - flagged_utxo_isolation: disclosed UTXOs never mix with equal outputs
-    - initiation_fee_sats: taker pays to start the protocol (probing cost)
+    Supports configurable mixdepth count and the following mitigations:
+    - offer_slot_size + slot_ttl_*: timed sticky offer slot. Each maker advertises
+      a random N-UTXO subset of its active mixdepth, sticky for a randomized
+      lifetime. Re-probing within one slot lifetime leaks nothing new; rotation
+      happens on TTL expiry or when a slot UTXO is consumed by a successful CJ.
+    - initiation_fee_sats: taker pays per maker to start the protocol (probing
+      cost lever).
     """
 
     def __init__(
@@ -613,14 +569,6 @@ class RealisticNetworkSimulator:
         sampled_profiles = self._sample_profiles(maker_profiles, config.n_makers)
         self.makers = self._initialize_makers(sampled_profiles)
 
-        # Per-maker merge behavior (for mixed strategy populations)
-        self._merge_algorithm_by_maker: dict[str, MergeAlgorithm] = {}
-        for maker in self.makers:
-            if self.rng.random() < config.greediest_maker_fraction:
-                self._merge_algorithm_by_maker[maker.maker_id] = "greedy"
-            else:
-                self._merge_algorithm_by_maker[maker.maker_id] = config.merge_algorithm
-
         self.known_utxos_by_maker: dict[str, set[str]] = {m.maker_id: set() for m in self.makers}
         self.known_utxo_depth_by_maker: dict[str, dict[str, int]] = {
             m.maker_id: {} for m in self.makers
@@ -630,13 +578,19 @@ class RealisticNetworkSimulator:
         }
         self.probed_makers: set[str] = set()
 
-        # Sticky mitigation state: UTXOs to keep offering until successful CJ
-        # Maps maker_id -> set of utxo_ids that were disclosed in a failed CJ/probe
-        self._sticky_utxos: dict[str, set[str]] = {m.maker_id: set() for m in self.makers}
+        # Global round counter, incremented every probe round and every honest CJ.
+        # Drives slot-TTL expiry so high-pressure probing can't freeze the slot.
+        self._round_counter = 0
 
-        # Flagged UTXO tracking: UTXOs that were disclosed (probed/failed) and their
-        # change descendants. These must NOT be spent together with equal-amount outputs.
-        self._flagged_utxos: dict[str, set[str]] = {m.maker_id: set() for m in self.makers}
+        # Timed sticky offer-slot state.
+        # _offer_slots[maker_id] = list of WalletUTXO currently advertised
+        # _slot_expiry_round[maker_id] = round at which the slot must be rotated
+        # The slot is built on first need (_ensure_slot) so the initial expiry
+        # uses the configured TTL window.
+        self._offer_slots: dict[str, list[WalletUTXO]] = {}
+        self._slot_expiry_round: dict[str, int] = {}
+        for maker in self.makers:
+            self._build_offer_slot(maker, current_round=0)
 
         # Probing cost accumulator
         self._total_probing_cost_sats = 0
@@ -645,7 +599,6 @@ class RealisticNetworkSimulator:
 
         # Additional behavior metrics
         self._total_inputs_used = 0
-        self._total_disclosed_inputs_used = 0
         self._total_maker_participations = 0
 
         if self.config.pre_probe_all_makers:
@@ -893,10 +846,22 @@ class RealisticNetworkSimulator:
         selected_indices = self.rng.choice(len(candidates), size=n_select, replace=False, p=weights)
         return [candidates[int(i)] for i in selected_indices]
 
-    def _select_makers_for_amount(self, cj_amount_sats: int) -> list[SimulatedMaker] | None:
+    def _select_makers_for_amount(
+        self,
+        cj_amount_sats: int,
+        current_round: int,
+    ) -> list[SimulatedMaker] | None:
         amount = cj_amount_sats
         for _ in range(8):
-            candidates = [m for m in self.makers if m.advertised_max_size() >= amount]
+            # A maker can service the amount only if its current offer slot covers it
+            candidates = [
+                m
+                for m in self.makers
+                if sum(
+                    u.value_sats for u in self._ensure_slot(m.maker_id, current_round)
+                )
+                >= amount
+            ]
             if len(candidates) >= self.config.n_makers_per_coinjoin:
                 return self._weighted_sample_makers(candidates, self.config.n_makers_per_coinjoin)
             amount = int(amount * 0.9)
@@ -904,237 +869,111 @@ class RealisticNetworkSimulator:
                 break
         return None
 
+    def _build_offer_slot(
+        self,
+        maker: SimulatedMaker,
+        current_round: int,
+    ) -> list[WalletUTXO]:
+        """(Re)build the maker's advertised offer slot and reset its TTL.
+
+        If offer_slot_size is None the slot is the full active mixdepth (baseline
+        behavior). Otherwise the slot is a random N-UTXO subset. The slot
+        lifetime is sampled uniformly from [slot_ttl_min_rounds,
+        slot_ttl_max_rounds]; expiry is current_round + lifetime.
+        """
+        depth = maker.largest_mixdepth()
+        utxos = list(maker.mixdepths[depth])
+        cap = self.config.offer_slot_size
+        if utxos and cap is not None and len(utxos) > cap:
+            indices = self.rng.choice(len(utxos), size=cap, replace=False)
+            slot = [utxos[int(i)] for i in indices]
+        else:
+            slot = utxos
+
+        ttl = int(
+            self.rng.integers(
+                self.config.slot_ttl_min_rounds,
+                self.config.slot_ttl_max_rounds + 1,
+            )
+        )
+        self._offer_slots[maker.maker_id] = slot
+        self._slot_expiry_round[maker.maker_id] = current_round + ttl
+        return slot
+
+    def _ensure_slot(self, maker_id: str, current_round: int) -> list[WalletUTXO]:
+        """Return the current offer slot, rebuilding if expired or empty."""
+        maker = next((m for m in self.makers if m.maker_id == maker_id), None)
+        if maker is None:
+            return []
+        slot = self._offer_slots.get(maker_id, [])
+        expiry = self._slot_expiry_round.get(maker_id, -1)
+        # Filter to UTXOs still live in the maker's mixdepths
+        depth = maker.largest_mixdepth()
+        live_ids = {u.utxo_id for u in maker.mixdepths[depth]}
+        live_slot = [u for u in slot if u.utxo_id in live_ids]
+        if not live_slot or current_round >= expiry:
+            return self._build_offer_slot(maker, current_round)
+        # Slot still valid but some UTXOs may have been consumed elsewhere -- prune.
+        if len(live_slot) != len(slot):
+            self._offer_slots[maker_id] = live_slot
+        return live_slot
+
     def _select_inputs_for_amount(
         self,
         maker_id: str,
         utxos: list[WalletUTXO],
         amount_sats: int,
+        current_round: int,
     ) -> list[WalletUTXO] | None:
-        algorithm = self._merge_algorithm_by_maker.get(maker_id, self.config.merge_algorithm)
-        policy = self.config.disclosed_input_policy
-        known = self.known_utxos_by_maker.get(maker_id, set())
-
-        disclosed = [u for u in utxos if u.utxo_id in known]
-        undisclosed = [u for u in utxos if u.utxo_id not in known]
-
-        def ordered_by_strategy(
-            items: list[WalletUTXO],
-            use_algorithm: MergeAlgorithm,
-        ) -> list[WalletUTXO]:
-            if use_algorithm in ("default", "greedy"):
-                return sorted(items, key=lambda u: u.value_sats, reverse=True)
-            if use_algorithm == "random":
-                shuffled = list(items)
-                self.rng.shuffle(shuffled)
-                return shuffled
-            # gradual: start from larger inputs too, then append one smaller later
-            return sorted(items, key=lambda u: u.value_sats, reverse=True)
-
-        def greedy_pick(pool: list[WalletUTXO]) -> list[WalletUTXO] | None:
-            ordered = ordered_by_strategy(pool, algorithm)
-            selected: list[WalletUTXO] = []
-            total = 0
-            for utxo in ordered:
-                selected.append(utxo)
-                total += utxo.value_sats
-                if total >= amount_sats:
-                    return selected
+        # Use only the UTXOs currently in the maker's offer slot.
+        # This is the crucial correctness fix: the taker CJ uses the same UTXO
+        # set that was (or will be) advertised in the offer, not the full pool.
+        slot = self._ensure_slot(maker_id, current_round)
+        # Filter slot to only UTXOs still present in the mixdepth (race-condition safety)
+        live_ids = {u.utxo_id for u in utxos}
+        available = [u for u in slot if u.utxo_id in live_ids]
+        if not available:
             return None
-
-        def apply_merge_extras(
-            selected: list[WalletUTXO],
-            remaining_pool: list[WalletUTXO],
-        ) -> list[WalletUTXO]:
-            if not remaining_pool:
+        # Greedy largest-first selection from slot
+        ordered = sorted(available, key=lambda u: u.value_sats, reverse=True)
+        selected: list[WalletUTXO] = []
+        total = 0
+        for utxo in ordered:
+            selected.append(utxo)
+            total += utxo.value_sats
+            if total >= amount_sats:
                 return selected
+        return None
 
-            if algorithm == "greedy":
-                ordered_remaining = sorted(remaining_pool, key=lambda u: u.value_sats, reverse=True)
-                return selected + ordered_remaining
+    def probe_maker_max_mixdepth(self, maker_id: str, current_round: int = 0) -> int:
+        """Probe one maker and reveal the UTXOs in its current offer slot.
 
-            if algorithm == "gradual":
-                remaining_sorted = sorted(remaining_pool, key=lambda u: u.value_sats)
-                return selected + [remaining_sorted[0]]
-
-            if algorithm == "random":
-                remaining_sorted = sorted(remaining_pool, key=lambda u: u.value_sats)
-                extra_count = int(self.rng.integers(0, min(2, len(remaining_sorted)) + 1))
-                if extra_count > 0:
-                    return selected + remaining_sorted[:extra_count]
-
-            # default
-            return selected
-
-        if policy == "all_disclosed":
-            if not disclosed:
-                picks = greedy_pick(utxos)
-                if picks is None:
-                    return None
-                picked_ids = {u.utxo_id for u in picks}
-                remaining = [u for u in utxos if u.utxo_id not in picked_ids]
-                return apply_merge_extras(picks, remaining)
-            picks = greedy_pick(disclosed)
-            if picks is not None:
-                picked_ids = {u.utxo_id for u in picks}
-                remaining = [u for u in disclosed if u.utxo_id not in picked_ids]
-                return apply_merge_extras(picks, remaining)
-            picks = greedy_pick(disclosed + undisclosed)
-            if picks is None:
-                return None
-            picked_ids = {u.utxo_id for u in picks}
-            remaining = [u for u in (disclosed + undisclosed) if u.utxo_id not in picked_ids]
-            return apply_merge_extras(picks, remaining)
-
-        if policy == "minimal_disclosed":
-            # Use disclosed inputs first but as few as possible, then top up from others.
-            if not disclosed:
-                picks = greedy_pick(utxos)
-                if picks is None:
-                    return None
-                picked_ids = {u.utxo_id for u in picks}
-                remaining = [u for u in utxos if u.utxo_id not in picked_ids]
-                return apply_merge_extras(picks, remaining)
-            disclosed_sorted = sorted(disclosed, key=lambda u: u.value_sats, reverse=True)
-            picked: list[WalletUTXO] = []
-            total = 0
-            for utxo in disclosed_sorted:
-                picked.append(utxo)
-                total += utxo.value_sats
-                if total >= amount_sats:
-                    picked_ids = {u.utxo_id for u in picked}
-                    remaining = [u for u in disclosed if u.utxo_id not in picked_ids]
-                    return apply_merge_extras(picked, remaining)
-            remaining_needed = amount_sats - total
-            rest = greedy_pick([u for u in utxos if u.utxo_id not in {p.utxo_id for p in picked}])
-            if rest is None:
-                return None
-            # Add only as many as needed from rest (strategy order already deterministic)
-            topup: list[WalletUTXO] = []
-            topup_total = 0
-            for utxo in rest:
-                topup.append(utxo)
-                topup_total += utxo.value_sats
-                if topup_total >= remaining_needed:
-                    break
-            merged = picked + topup
-            merged_ids = {u.utxo_id for u in merged}
-            remaining = [u for u in utxos if u.utxo_id not in merged_ids]
-            return apply_merge_extras(merged, remaining)
-
-        if policy == "avoid_disclosed":
-            picks = greedy_pick(undisclosed)
-            if picks is not None:
-                picked_ids = {u.utxo_id for u in picks}
-                remaining = [u for u in undisclosed if u.utxo_id not in picked_ids]
-                return apply_merge_extras(picks, remaining)
-            picks = greedy_pick(utxos)
-            if picks is None:
-                return None
-            picked_ids = {u.utxo_id for u in picks}
-            remaining = [u for u in utxos if u.utxo_id not in picked_ids]
-            return apply_merge_extras(picks, remaining)
-
-        if policy == "randomized":
-            # Favor undisclosed but occasionally consume disclosed to "flush" known coins.
-            if self.rng.random() < 0.7:
-                picks = greedy_pick(undisclosed)
-                if picks is not None:
-                    picked_ids = {u.utxo_id for u in picks}
-                    remaining = [u for u in undisclosed if u.utxo_id not in picked_ids]
-                    return apply_merge_extras(picks, remaining)
-            mixed = list(utxos)
-            self.rng.shuffle(mixed)
-            picks = greedy_pick(mixed)
-            if picks is None:
-                return None
-            picked_ids = {u.utxo_id for u in picks}
-            remaining = [u for u in mixed if u.utxo_id not in picked_ids]
-            return apply_merge_extras(picks, remaining)
-
-        if policy == "adaptive":
-            total_count = len(utxos)
-            disclosed_count = len(disclosed)
-            backlog_ratio = (disclosed_count / total_count) if total_count > 0 else 0.0
-
-            base = self.config.adaptive_flush_base_probability
-            max_p = self.config.adaptive_flush_max_probability
-            target = max(1e-9, self.config.adaptive_flush_backlog_target)
-
-            pressure = min(1.0, backlog_ratio / target)
-            flush_prob = base + (max_p - base) * pressure
-
-            # Usually avoid disclosed inputs, but flush some when backlog is high
-            if self.rng.random() > flush_prob:
-                picks = greedy_pick(undisclosed)
-                if picks is not None:
-                    picked_ids = {u.utxo_id for u in picks}
-                    remaining = [u for u in undisclosed if u.utxo_id not in picked_ids]
-                    return apply_merge_extras(picks, remaining)
-
-            # Flush mode: intentionally consume disclosed inputs, but not only disclosed
-            # when avoidable; this keeps maker functional under high pressure.
-            mixed = disclosed + undisclosed
-            picks = greedy_pick(mixed)
-            if picks is None:
-                return None
-            picked_ids = {u.utxo_id for u in picks}
-            remaining = [u for u in mixed if u.utxo_id not in picked_ids]
-            return apply_merge_extras(picks, remaining)
-
-        # "ignore" policy: strategy only
-        picks = greedy_pick(utxos)
-        if picks is None:
-            return None
-        picked_ids = {u.utxo_id for u in picks}
-        remaining = [u for u in utxos if u.utxo_id not in picked_ids]
-        return apply_merge_extras(picks, remaining)
-
-    def probe_maker_max_mixdepth(self, maker_id: str) -> int:
-        """Probe one maker and reveal UTXOs in its current largest mixdepth.
-
-        Mitigations applied:
-        - sticky_disclosed_utxos: if the maker has sticky UTXOs from a previous
-          probe/failed CJ, only those are re-disclosed (no new info leaked).
-        - max_utxos_per_offer: cap how many UTXOs are revealed.
+        Mitigation behavior:
+        - Timed sticky slot (offer_slot_size + slot_ttl_*): re-probing within one
+          slot lifetime reveals the same UTXOs and leaks nothing new. The slot
+          rotates only when its TTL expires or one of its UTXOs is consumed in a
+          successful CoinJoin.
+        - Without offer_slot_size set, every probe reveals the entire active
+          mixdepth (baseline behavior).
         """
-        maker = next((m for m in self.makers if m.maker_id == maker_id), None)
-        if maker is None:
+        slot = self._ensure_slot(maker_id, current_round)
+        if not slot:
             return 0
-
-        # Sticky mitigation: if maker already has sticky UTXOs, re-disclose only those.
-        # The evil taker learns nothing new.
-        if self.config.sticky_disclosed_utxos and self._sticky_utxos[maker_id]:
-            # Re-disclose existing sticky UTXOs (they are already known)
-            return len(self._sticky_utxos[maker_id])
-
+        maker = next(m for m in self.makers if m.maker_id == maker_id)
         depth = maker.largest_mixdepth()
-        utxos = list(maker.mixdepths[depth])
-
-        # max_utxos_per_offer: only reveal a limited number of UTXOs
-        if self.config.max_utxos_per_offer is not None:
-            cap = self.config.max_utxos_per_offer
-            if len(utxos) > cap:
-                # Sort by value descending: reveal the largest UTXOs (greedy for amount)
-                utxos = sorted(utxos, key=lambda u: u.value_sats, reverse=True)[:cap]
 
         known = self.known_utxos_by_maker[maker_id]
         known_depth = self.known_utxo_depth_by_maker[maker_id]
-        for utxo in utxos:
+        for utxo in slot:
             known.add(utxo.utxo_id)
             known_depth[utxo.utxo_id] = depth
 
         self.known_mixdepths_by_maker[maker_id].add(depth)
         self.probed_makers.add(maker_id)
 
-        # Sticky mitigation: mark these UTXOs as sticky
-        if self.config.sticky_disclosed_utxos:
-            self._sticky_utxos[maker_id].update(u.utxo_id for u in utxos)
-
-        # Flagged mitigation: mark disclosed UTXOs as flagged
-        if self.config.flagged_utxo_isolation:
-            self._flagged_utxos[maker_id].update(u.utxo_id for u in utxos)
-
-        return len(utxos)
+        # NOTE: do NOT rotate the slot here. Re-probing within the TTL window
+        # is exactly what timed-sticky-slot is designed to neutralise.
+        return len(slot)
 
     def _pre_probe_all_makers_once(self) -> None:
         """Probe every maker once before normal rounds begin.
@@ -1143,7 +982,9 @@ class RealisticNetworkSimulator:
         around the same time at max offer size.
         """
         for maker in self.makers:
-            revealed = self.probe_maker_max_mixdepth(maker.maker_id)
+            revealed = self.probe_maker_max_mixdepth(
+                maker.maker_id, current_round=self._round_counter
+            )
             self._preprobe_actions += 1
             self._preprobe_utxos += revealed
             if self.config.initiation_fee_sats > 0:
@@ -1159,10 +1000,12 @@ class RealisticNetworkSimulator:
 
         probed_utxos = 0
         for maker in targets:
-            probed_utxos += self.probe_maker_max_mixdepth(maker.maker_id)
+            probed_utxos += self.probe_maker_max_mixdepth(
+                maker.maker_id, current_round=self._round_counter
+            )
         return n_targets, probed_utxos
 
-    def probe_all_makers_once(self) -> tuple[int, int]:
+    def probe_all_makers_once(self, current_round: int | None = None) -> tuple[int, int]:
         """Probe every maker simultaneously at their individual max offer size.
 
         This models a single attacker probe round:
@@ -1173,11 +1016,13 @@ class RealisticNetworkSimulator:
 
         Returns (n_makers_probed, total_utxos_revealed).
         """
+        if current_round is None:
+            current_round = self._round_counter
         n_probed = 0
         total_utxos = 0
         fee_cost = 0
         for maker in self.makers:
-            revealed = self.probe_maker_max_mixdepth(maker.maker_id)
+            revealed = self.probe_maker_max_mixdepth(maker.maker_id, current_round=current_round)
             n_probed += 1
             total_utxos += revealed
             if self.config.initiation_fee_sats > 0:
@@ -1291,14 +1136,22 @@ class RealisticNetworkSimulator:
 
             for event_type in events:
                 if event_type == "p":
-                    # Probe round: probe all makers, pay fee, no CJ
-                    n_probed, _ = self.probe_all_makers_once()
+                    # Probe round: probe all makers, pay fee, no CJ.
+                    # Advance the global round counter so slot TTLs can fire even
+                    # under sustained probing with sparse honest activity.
+                    self._round_counter += 1
+                    n_probed, _ = self.probe_all_makers_once(
+                        current_round=self._round_counter
+                    )
                     day_probe_rounds += 1
                     day_probe_actions += n_probed
                     day_probe_cost += n_probed * self.config.initiation_fee_sats
                 else:
                     # Honest CJ
-                    record = self.simulate_single_honest_coinjoin(round_index=round_counter)
+                    self._round_counter += 1
+                    record = self.simulate_single_honest_coinjoin(
+                        round_index=self._round_counter
+                    )
                     round_counter += 1
                     if record is not None:
                         day_cjs_completed += 1
@@ -1411,11 +1264,9 @@ class RealisticNetworkSimulator:
             attack_daily_cost_btc=float(attack_daily_cost) / SATS_PER_BTC,
             recovery_day_known_live_le_10pct=recovery_known_live,
             recovery_day_deanon_le_5pct=recovery_deanon,
-            merge_algorithm=self.config.merge_algorithm,
-            disclosed_input_policy=self.config.disclosed_input_policy,
-            max_utxos_per_offer=self.config.max_utxos_per_offer,
-            sticky_disclosed_utxos=self.config.sticky_disclosed_utxos,
-            flagged_utxo_isolation=self.config.flagged_utxo_isolation,
+            offer_slot_size=self.config.offer_slot_size,
+            slot_ttl_min_rounds=self.config.slot_ttl_min_rounds,
+            slot_ttl_max_rounds=self.config.slot_ttl_max_rounds,
             wallet_init_mode=self.config.wallet_init_mode,
         )
 
@@ -1426,15 +1277,12 @@ class RealisticNetworkSimulator:
     ) -> HonestCoinJoinRecord | None:
         """Run one honest CoinJoin and update maker wallets if successful.
 
-        Mitigations applied:
-        - flagged_utxo_isolation: if a maker's input set includes flagged UTXOs,
-          do NOT count the equal-amount output as linked (it goes to a separate
-          "clean" flow). The attacker cannot cluster flagged inputs with the
-          equal output because the maker ensures they are never spent together.
-        - sticky_disclosed_utxos: clear sticky state after successful participation.
+        Mitigation behavior:
+        - The slot is rebuilt for any maker whose slot UTXO is consumed (and
+          implicitly when its TTL has expired -- see _ensure_slot).
         """
         amount = cj_amount_sats if cj_amount_sats is not None else self._sample_cj_amount_sats()
-        selected_makers = self._select_makers_for_amount(amount)
+        selected_makers = self._select_makers_for_amount(amount, current_round=round_index)
         if selected_makers is None:
             return None
 
@@ -1443,7 +1291,9 @@ class RealisticNetworkSimulator:
         for maker in selected_makers:
             source_depth = maker.largest_mixdepth()
             source_utxos = maker.mixdepths[source_depth]
-            chosen = self._select_inputs_for_amount(maker.maker_id, source_utxos, amount)
+            chosen = self._select_inputs_for_amount(
+                maker.maker_id, source_utxos, amount, current_round=round_index
+            )
             if chosen is None:
                 return None
             fee_sats = self._maker_fee_sats(maker, amount)
@@ -1461,11 +1311,7 @@ class RealisticNetworkSimulator:
         maker_events: list[MakerParticipation] = []
         for maker, source_depth, next_depth, chosen, spend_plus_fee in plans:
             chosen_ids = {u.utxo_id for u in chosen}
-            disclosed_used = sum(
-                1 for u in chosen if u.utxo_id in self.known_utxos_by_maker[maker.maker_id]
-            )
             self._total_inputs_used += len(chosen)
-            self._total_disclosed_inputs_used += disclosed_used
             self._total_maker_participations += 1
             maker.mixdepths[source_depth] = [
                 utxo for utxo in maker.mixdepths[source_depth] if utxo.utxo_id not in chosen_ids
@@ -1493,17 +1339,10 @@ class RealisticNetworkSimulator:
                 change_utxo_id = change_utxo.utxo_id
                 change_mixdepth = source_depth
 
-                # Flagged mitigation: if any input was flagged, the change descendant
-                # inherits the flag
-                if self.config.flagged_utxo_isolation:
-                    flagged = self._flagged_utxos[maker.maker_id]
-                    if flagged.intersection(chosen_ids):
-                        flagged.add(change_utxo.utxo_id)
-
-            # Sticky mitigation: successful CJ clears sticky state
-            if self.config.sticky_disclosed_utxos:
-                # Remove spent UTXOs from sticky set
-                self._sticky_utxos[maker.maker_id] -= chosen_ids
+            # Slot rebuild on spend: the spent UTXOs are gone (and the next-depth
+            # equal_utxo lives in a different mixdepth), so rebuild a fresh slot
+            # in the maker's new active mixdepth and reset its TTL.
+            self._build_offer_slot(maker, current_round=round_index)
 
             maker_events.append(
                 MakerParticipation(
@@ -1520,20 +1359,6 @@ class RealisticNetworkSimulator:
         for event in maker_events:
             known_set = self.known_utxos_by_maker[event.maker_id]
             if known_set.intersection(event.input_utxo_ids):
-                # Flagged UTXO isolation: if the intersection is ONLY flagged UTXOs,
-                # the attacker cannot link the equal output to the maker because the
-                # maker ensures flagged UTXOs are never co-spent with equal outputs.
-                # In practice, this means flagged inputs don't identify the maker.
-                if self.config.flagged_utxo_isolation:
-                    flagged = self._flagged_utxos[event.maker_id]
-                    intersecting = known_set.intersection(event.input_utxo_ids)
-                    # Only count as identified if there are non-flagged known inputs
-                    non_flagged_intersecting = intersecting - flagged
-                    if not non_flagged_intersecting:
-                        # All known inputs are flagged -> maker is NOT identified
-                        # (the equal output is isolated from flagged UTXOs)
-                        continue
-
                 identified_makers += 1
                 known_set.update(event.input_utxo_ids)
                 if event.change_utxo_id is not None:
@@ -1565,6 +1390,7 @@ class RealisticNetworkSimulator:
         cj_records: list[HonestCoinJoinRecord] = []
 
         for round_index in range(self.config.n_rounds):
+            self._round_counter = round_index
             if self.rng.random() < self.config.evil_taker_fraction:
                 n_evil_rounds += 1
                 targets, probed = self._run_evil_round()
@@ -1650,16 +1476,23 @@ class RealisticNetworkSimulator:
             if self._total_maker_participations > 0
             else 0.0
         )
-        avg_disclosed_inputs_per_maker = (
-            self._total_disclosed_inputs_used / self._total_maker_participations
-            if self._total_maker_participations > 0
-            else 0.0
-        )
-        disclosed_input_usage_fraction = (
-            self._total_disclosed_inputs_used / self._total_inputs_used
-            if self._total_inputs_used > 0
-            else 0.0
-        )
+
+        # Top-N UTXO coverage: fraction of largest mixdepth balance covered by top-N UTXOs
+        top1_coverages: list[float] = []
+        top3_coverages: list[float] = []
+        top5_coverages: list[float] = []
+        for maker in self.makers:
+            depth = maker.largest_mixdepth()
+            utxos = sorted(maker.mixdepths[depth], key=lambda u: u.value_sats, reverse=True)
+            depth_balance = sum(u.value_sats for u in utxos)
+            if depth_balance > 0:
+                top1_coverages.append(sum(u.value_sats for u in utxos[:1]) / depth_balance)
+                top3_coverages.append(sum(u.value_sats for u in utxos[:3]) / depth_balance)
+                top5_coverages.append(sum(u.value_sats for u in utxos[:5]) / depth_balance)
+
+        mean_top1 = float(np.mean(top1_coverages)) if top1_coverages else 0.0
+        mean_top3 = float(np.mean(top3_coverages)) if top3_coverages else 0.0
+        mean_top5 = float(np.mean(top5_coverages)) if top5_coverages else 0.0
 
         return NetworkSimulationResult(
             evil_taker_fraction=self.config.evil_taker_fraction,
@@ -1685,27 +1518,22 @@ class RealisticNetworkSimulator:
             mean_cj_amount_btc=mean_cj_amount_btc,
             std_cj_amount_btc=std_cj_amount_btc,
             n_mixdepths=self._n_mixdepths,
-            max_utxos_per_offer=self.config.max_utxos_per_offer,
-            sticky_disclosed_utxos=self.config.sticky_disclosed_utxos,
-            flagged_utxo_isolation=self.config.flagged_utxo_isolation,
+            offer_slot_size=self.config.offer_slot_size,
+            slot_ttl_min_rounds=self.config.slot_ttl_min_rounds,
+            slot_ttl_max_rounds=self.config.slot_ttl_max_rounds,
             initiation_fee_sats=self.config.initiation_fee_sats,
             total_probing_cost_sats=self._total_probing_cost_sats,
             total_honest_volume_sats=total_honest_volume_sats,
             probing_cost_per_probe_sats=probing_cost_per_probe,
             probing_cost_to_volume_ratio=probing_cost_to_volume,
             pre_probe_all_makers=self.config.pre_probe_all_makers,
-            merge_algorithm=self.config.merge_algorithm,
-            greediest_maker_fraction=self.config.greediest_maker_fraction,
-            disclosed_input_policy=self.config.disclosed_input_policy,
             wallet_init_mode=self.config.wallet_init_mode,
-            adaptive_flush_base_probability=self.config.adaptive_flush_base_probability,
-            adaptive_flush_max_probability=self.config.adaptive_flush_max_probability,
-            adaptive_flush_backlog_target=self.config.adaptive_flush_backlog_target,
             avg_inputs_per_maker=avg_inputs_per_maker,
-            avg_disclosed_inputs_used_per_maker=avg_disclosed_inputs_per_maker,
-            disclosed_input_usage_fraction=disclosed_input_usage_fraction,
             preprobe_actions=self._preprobe_actions,
             preprobe_utxos=self._preprobe_utxos,
+            mean_top1_utxo_coverage=mean_top1,
+            mean_top3_utxo_coverage=mean_top3,
+            mean_top5_utxo_coverage=mean_top5,
         )
 
 

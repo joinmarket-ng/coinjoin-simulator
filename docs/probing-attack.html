@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoinJoin Probing Attack: Analysis and Countermeasures</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono&display=swap');
+
+    :root {
+      --ink: #102231;
+      --ink-soft: #3a5568;
+      --accent: #1f7a8c;
+      --accent-2: #1f9366;
+      --warn: #c7472d;
+      --paper: #f7fbfd;
+      --panel: #ffffff;
+      --line: #d7e3ea;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'IBM Plex Sans', sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 420px at 95% -10%, rgba(31, 122, 140, 0.15), transparent 55%),
+        radial-gradient(1100px 460px at -20% 0%, rgba(31, 147, 102, 0.12), transparent 58%),
+        linear-gradient(180deg, #f8fcff 0%, #eef6f8 100%);
+      line-height: 1.6;
+      font-size: 15.5px;
+    }
+
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 28px 20px 60px;
+    }
+
+    h1, h2, h3 {
+      font-family: 'Fraunces', serif;
+      letter-spacing: 0.2px;
+    }
+
+    h1 {
+      font-size: clamp(1.7rem, 4vw, 2.3rem);
+      margin: 0 0 8px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      font-size: clamp(1.3rem, 3vw, 1.6rem);
+      margin: 32px 0 10px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      margin: 20px 0 6px;
+      color: var(--ink);
+    }
+
+    p { margin: 0 0 12px; color: var(--ink-soft); }
+
+    .hero {
+      background: linear-gradient(135deg, #102231 0%, #1a3d52 60%, #1f7a8c 100%);
+      color: #f6fcff;
+      border-radius: 14px;
+      padding: 28px 26px;
+      margin-bottom: 8px;
+      box-shadow: 0 12px 28px rgba(18, 40, 56, 0.18);
+    }
+
+    .hero p { color: rgba(246, 252, 255, 0.92); margin: 0 0 6px; }
+    .hero .subtitle { font-size: 1.05rem; margin-bottom: 16px; max-width: 720px; }
+    .hero .meta { font-size: 0.88rem; opacity: 0.75; margin-top: 12px; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .kpi {
+      background: rgba(255, 255, 255, 0.11);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .kpi strong {
+      display: block;
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    .kpi span { font-size: 0.8rem; opacity: 0.85; }
+    .kpi.danger strong { color: #ff9b8a; }
+    .kpi.safe strong { color: #8eecc0; }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-top: 16px;
+      box-shadow: 0 3px 12px rgba(16, 34, 49, 0.05);
+    }
+
+    .card p { margin: 0 0 10px; }
+
+    .chart {
+      background: #fff;
+      border: 1px solid #e5edf2;
+      border-radius: 10px;
+      padding: 4px;
+      margin-top: 10px;
+    }
+
+    .callout {
+      background: #f0f7f4;
+      border-left: 4px solid var(--accent-2);
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin: 14px 0;
+    }
+
+    .callout p { margin: 0; color: var(--ink); }
+
+    .callout-warn {
+      background: #fdf4f2;
+      border-left-color: var(--warn);
+    }
+
+    .param-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 0.92rem;
+    }
+
+    .param-table th {
+      text-align: left;
+      padding: 8px 10px;
+      background: #f2f7fa;
+      border-bottom: 2px solid var(--line);
+      font-weight: 600;
+    }
+
+    .param-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #eaf0f4;
+      color: var(--ink-soft);
+    }
+
+    .param-table code {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.88em;
+      background: #f0f5f8;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    .effect-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 0.92rem;
+    }
+
+    .effect-table th {
+      text-align: left;
+      padding: 8px 10px;
+      background: #f2f7fa;
+      border-bottom: 2px solid var(--line);
+      font-weight: 600;
+    }
+
+    .effect-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #eaf0f4;
+      color: var(--ink-soft);
+    }
+
+    .effect-table .effective { color: #1a7a4f; font-weight: 600; }
+    .effect-table .partial { color: #b8860b; font-weight: 600; }
+    .effect-table .ineffective { color: #c7472d; font-weight: 600; }
+
+    .step-list {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      margin: 10px 0;
+    }
+
+    .step-list li {
+      counter-increment: step;
+      padding: 8px 0 8px 38px;
+      position: relative;
+      color: var(--ink-soft);
+      border-bottom: 1px solid #f0f4f7;
+    }
+
+    .step-list li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      width: 26px;
+      height: 26px;
+      line-height: 26px;
+      text-align: center;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+
+    .footer {
+      margin-top: 32px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 0.88rem;
+      color: #6a8090;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: var(--ink); }
+
+    @media (max-width: 700px) {
+      .kpis { grid-template-columns: repeat(2, 1fr); }
+      .wrap { padding: 18px 14px 40px; }
+      .hero { padding: 20px 16px; }
+    }
+
+    @media (max-width: 480px) {
+      .kpis { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="topnav">
+  <span class="brand">CoinJoin Simulator</span>
+  <a href="index.html">Home</a>
+  <a href="mainnet-deanon.html">Mainnet deanonymization</a>
+  <a href="probing-attack.html">Probing attack &amp; mitigations</a>
+  <a href="https://github.com/joinmarket-ng/coinjoin-simulator">GitHub</a>
+</nav>
+
+  <main class="wrap">
+
+    <!-- HERO -->
+    <section class="hero">
+      <h1>CoinJoin Probing Attack</h1>
+      <p class="subtitle">
+        A practical analysis of how a malicious actor builds a live UTXO
+        database of JoinMarket makers by probing, the conditions under which
+        this enables maker identification in honest CoinJoins, and the
+        countermeasures that limit the leakage.
+      </p>
+      <div class="kpis">
+        <div class="kpi danger">
+          <strong>64.0%</strong>
+          <span>Baseline: CJs where all makers are identifiable from inputs (40% attacker share, 5000 rounds)</span>
+        </div>
+        <div class="kpi safe">
+          <strong>31.1%</strong>
+          <span>Recommended policy (same conditions)</span>
+        </div>
+        <div class="kpi danger">
+          <strong>84.7%</strong>
+          <span>Baseline at 10 probes/day</span>
+        </div>
+        <div class="kpi">
+          <strong>0.0050 BTC/day</strong>
+          <span>Attacker cost at 10 probes/day (recommended policy)</span>
+        </div>
+      </div>
+      <div class="meta">
+        Simulation results generated 2026-05-21
+      </div>
+    </section>
+
+    <!-- 1. THE PROBLEM -->
+    <h2>1. The Problem: Privacy in CoinJoin</h2>
+
+    <p>
+      <strong>CoinJoin</strong> is a collaborative Bitcoin transaction where
+      multiple participants combine their inputs and outputs into a single
+      transaction. When done correctly, an outside observer cannot determine
+      which input funded which output, providing <strong>transaction
+      privacy</strong>.
+    </p>
+
+    <p>
+      In JoinMarket-style CoinJoins, there are two roles:
+    </p>
+
+    <div class="card">
+      <p>
+        <strong>Makers</strong> are always-online bots that advertise
+        offers on a public orderbook. Each maker has a wallet divided into
+        multiple <em>mixdepths</em> (separate accounts, typically 5). They
+        hold funds across these mixdepths and earn fees for participating
+        in CoinJoins. Makers are selected weighted by their
+        <em>fidelity bond</em>, a time-locked Bitcoin deposit that proves
+        commitment and makes Sybil attacks expensive.
+      </p>
+      <p>
+        <strong>Takers</strong> initiate CoinJoin transactions. They select
+        makers from the orderbook, agree on a CoinJoin amount, and
+        coordinate the transaction. The taker's goal is privacy: after
+        the CoinJoin, their output should be indistinguishable from
+        the makers' outputs.
+      </p>
+      <p>
+        The <strong>anonymity set</strong> of a CoinJoin with
+        <em>N</em> makers is <em>N + 1</em>: an observer cannot tell which
+        of the N+1 equal-amount outputs belongs to the taker. A CoinJoin
+        with 8 makers gives an anonymity set of 9.
+      </p>
+    </div>
+
+    <p>
+      That worst-case anonymity holds against a passive on-chain
+      observer. This study isolates a different threat: an
+      <strong>active attacker</strong> who participates in the protocol
+      itself to build a live database of maker UTXOs. By repeatedly
+      probing makers off-chain, the attacker learns which inputs each
+      maker will contribute, enabling them to <em>identify</em> makers
+      in subsequent honest CoinJoins (matching known UTXOs to transaction
+      inputs). Identifying all N makers in a CoinJoin is a necessary
+      condition for the taker's equal-output to become isolable by
+      exclusion &mdash; but it is not sufficient on its own: that final
+      step also requires knowing which equal-output belongs to each
+      identified maker, which demands additional on-chain clustering
+      (covered in the companion
+      <a href="mainnet-deanon.html">JoinMarket equal-output anonymity in
+      practice</a> study). For the on-chain side &mdash; equal-output
+      reuse, change heuristics, and clustering across many
+      transactions &mdash; see that companion study.
+    </p>
+
+    <!-- 2. HOW PROBING WORKS -->
+    <h2>2. How Probing Works</h2>
+
+    <p>
+      A probing attack exploits the CoinJoin negotiation protocol. Before
+      a CoinJoin transaction is signed and broadcast, makers must reveal
+      their input UTXOs to the taker. Normally this is fine because the
+      taker is honest and completes the transaction. But a
+      <strong>malicious taker</strong> can abuse this:
+    </p>
+
+    <ol class="step-list">
+      <li>
+        <strong>Probe:</strong> The attacker initiates a CoinJoin with a
+        maker, requesting the maker's maximum offer amount. The maker
+        reveals all UTXOs in their largest mixdepth. The attacker records
+        them and <strong>aborts</strong> the transaction.
+      </li>
+      <li>
+        <strong>Accumulate:</strong> The attacker repeats this with
+        many or all makers, building a database of
+        <em>known UTXOs per maker</em>.
+      </li>
+      <li>
+        <strong>Identify:</strong> When an honest taker later creates a
+        CoinJoin, the attacker observes the on-chain transaction. If any
+        input matches a known UTXO from the attacker's database, the
+        corresponding maker is <strong>identified</strong>.
+      </li>
+      <li>
+        <strong>Cascade:</strong> When a maker is identified, the attacker
+        also learns their <em>co-spent inputs</em> (other UTXOs the maker
+        contributed) and their <em>change output</em> (distinguishable by
+        value from the equal-amount outputs). These new UTXOs are added to
+        the database, enabling identification in future CoinJoins. The
+        attacker's knowledge <strong>snowballs</strong>.
+      </li>
+      <li>
+        <strong>Deanonymize:</strong> Probing alone reveals maker inputs
+        and change outputs, but does <em>not</em> directly identify which
+        equal-amount output belongs to each maker &mdash; all equal outputs
+        are the same size. To isolate the taker's equal-output, the
+        attacker must additionally map each identified maker to their
+        equal-output, for example by tracking the maker's wallet across
+        multiple CoinJoins or by applying on-chain clustering (see the
+        companion <a href="mainnet-deanon.html">mainnet-deanon study</a>).
+        Once all <em>N</em> maker equal-outputs are accounted for, the
+        remaining one is the taker's: the anonymity set collapses from
+        <em>N + 1</em> to 1.
+      </li>
+    </ol>
+
+    <div class="callout">
+      <p>
+        <strong>Scope of this study.</strong> The simulator models only
+        the probe-to-cascade leak: how rapidly the attacker's known-UTXO
+        database grows as a function of probe rate, attacker share, and
+        countermeasures. It does <em>not</em> model on-chain heuristics
+        (change attribution, equal-output reuse, address reuse, timing).
+        Those compound the leak in practice; the
+        <a href="mainnet-deanon.html">mainnet-deanon study</a>
+        quantifies them on a real corpus. Read the two studies as
+        complementary lower bounds on a real attacker's capability.
+      </p>
+      <p>
+        The anonymity-set metric used here (<em>N + 1 &minus; identified
+        makers</em>) is a <strong>worst-case estimate</strong>. It assumes
+        that for every identified maker the attacker can also determine
+        which equal-amount output is theirs &mdash; an additional step
+        that in practice requires on-chain wallet clustering on top of the
+        probe database. The metric reported in this study (referred to as
+        "all-maker input coverage") is therefore strictly the fraction of
+        CoinJoins in which the attacker successfully matches every
+        maker's known UTXOs to their inputs. Full taker deanonymization
+        additionally requires the on-chain clustering step described in
+        the companion <a href="mainnet-deanon.html">mainnet-deanon study</a>.
+      </p>
+    </div>
+
+    <h3>Existing protections and their limits</h3>
+    <p>
+      JoinMarket already has a protection against probing:
+      <strong>PoDLE</strong> (Proof of Discrete Logarithm Equivalence).
+      To initiate a CoinJoin, the taker must commit a real UTXO worth at
+      least 20% of the requested amount. Each UTXO can only be used for
+      up to 3 PoDLE commitments (to allow for honest failures). Makers
+      broadcast used commitments to each other as a blacklist.
+    </p>
+
+    <div class="callout callout-warn">
+      <p>
+        <strong>The problem:</strong> PoDLE works against casual abuse, but
+        a well-resourced attacker can probe all makers simultaneously,
+        before the blacklist propagates. Each maker is probed for their
+        maximum offer amount, revealing as many UTXOs as possible. The
+        attacker spends their PoDLE commitment UTXOs, but in return
+        they get a complete snapshot of every maker's largest
+        mixdepth. This is the attack scenario we simulate.
+      </p>
+    </div>
+
+    <!-- 3. BASELINE VULNERABILITY -->
+    <h2>3. Baseline: How Bad Is It?</h2>
+
+    <p>
+      With no additional countermeasures beyond PoDLE, the CoinJoin
+      protocol is highly vulnerable to probing. We simulate a network of
+      100 makers with realistic wallet structures sampled from the live
+      JoinMarket orderbook.
+    </p>
+
+      <div class="card">
+      <p>
+        Even at moderate attacker shares, in a meaningful fraction of honest
+        CoinJoins the attacker can identify every maker from their inputs
+        within 1,000 rounds. At 20% attacker share (1 in 5 rounds is a
+        probe), roughly <strong>32% of CoinJoins have all makers
+        identifiable</strong>; at 40% it is about <strong>48%</strong>, and
+        at 80% it climbs to <strong>83%</strong>. (This is the necessary
+        precondition for taker deanonymization; the sufficient condition
+        also requires on-chain clustering.)
+      </p>
+      <div class="chart"><div>                            <div id="3e9c617b-4150-4d11-8fe4-935ca7a88390" class="plotly-graph-div" style="height:380px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("3e9c617b-4150-4d11-8fe4-935ca7a88390")) {                    Plotly.newPlot(                        "3e9c617b-4150-4d11-8fe4-935ca7a88390",                        [{"fill":"tozeroy","fillcolor":"rgba(199, 71, 45, 0.10)","line":{"color":"#c7472d","width":3},"marker":{"size":9},"mode":"lines+markers","name":"Baseline (no mitigations)","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.186459,0.320352,0.569061,0.483871,0.662531,0.832536],"type":"scatter"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"yaxis":{"title":{"text":"CJs where all makers are identifiable from inputs"},"tickformat":".0%","range":[0,1]},"xaxis":{"title":{"text":"Fraction of CoinJoin rounds initiated by attacker"},"tickformat":".0%"},"margin":{"l":55,"r":25,"t":56,"b":55},"title":{"text":"Baseline: All-Maker Input Coverage vs Attacker Share"},"height":380},                        {"responsive": true}                    )                };                            </script>        </div></div>
+    </div>
+
+    <div class="card">
+      <p>
+        The picture worsens with sustained probing. Because each
+        identification reveals more UTXOs (the cascade effect), the
+        attacker's database grows with every honest CoinJoin it
+        observes. Over 5,000 rounds of mixed probe + honest traffic,
+        the unmitigated baseline reaches roughly <strong>40%
+         all-maker input coverage at 10% attacker share</strong>, <strong>57% at
+        20%</strong>, and <strong>64% at 40%</strong>. This is the
+        long-term steady-state risk an unmitigated network converges
+        to. Variance across seeds is shown as a 95% CI band on the
+        sustained-attack chart in section 5.
+      </p>
+      <div class="chart"><div>                            <div id="a4ac6870-8742-4bec-9a5d-88edc3111bd2" class="plotly-graph-div" style="height:380px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("a4ac6870-8742-4bec-9a5d-88edc3111bd2")) {                    Plotly.newPlot(                        "a4ac6870-8742-4bec-9a5d-88edc3111bd2",                        [{"line":{"color":"#e8843c","dash":"dot","width":2},"marker":{"size":7},"mode":"lines+markers","name":"1,000 rounds","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.186459,0.320352,0.569061,0.483871,0.662531,0.832536],"type":"scatter"},{"line":{"color":"#c7472d","width":3},"marker":{"size":9},"mode":"lines+markers","name":"5,000 rounds (sustained)","x":[0.1,0.2,0.4,0.6],"y":[0.401453,0.569661,0.639501,0.851276],"type":"scatter"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"yaxis":{"title":{"text":"All-maker input coverage"},"tickformat":".0%","range":[0,1]},"xaxis":{"title":{"text":"Attacker fraction"},"tickformat":".0%"},"margin":{"l":55,"r":25,"t":56,"b":55},"legend":{"orientation":"h","yanchor":"bottom","y":1.02,"x":0.0},"title":{"text":"Baseline Degrades Over Time"},"height":380},                        {"responsive": true}                    )                };                            </script>        </div></div>
+    </div>
+
+    <!-- 4. COUNTERMEASURES -->
+    <h2>4. Countermeasures</h2>
+
+    <p>
+      We evaluate two classes of countermeasure. The first targets the
+      structural information leak (what each probe reveals); the second
+      raises the attacker's economic cost. Neither eliminates the UTXO
+      leakage on its own; together they shrink the attack window enough that
+      sustained probing stops being economically rational.
+    </p>
+
+    <h3>4.1 Timed sticky offer slot (<code>offer_slot_size</code>)</h3>
+    <p>
+      <strong>What it does:</strong> Each maker pre-selects a random
+      subset of <em>N</em> UTXOs from its active mixdepth &mdash; the
+      <em>offer slot</em> &mdash; and advertises only those. The advertised
+      <code>maxsize</code> equals the slot's total. The slot is sticky:
+      it stays fixed for a randomized lifetime drawn uniformly from
+      <code>[slot_ttl_min_rounds, slot_ttl_max_rounds]</code>
+      (default 4-20 rounds, roughly 1-5 hours at typical traffic).
+      Probes do <em>not</em> rotate the slot; only TTL expiry or a
+      successful CoinJoin (which spends a slot UTXO) rebuilds it.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> Re-probing the same maker within
+      its TTL reveals nothing new &mdash; the attacker pays the initiation
+      fee again and learns the same <em>N</em> UTXOs. Across many makers
+      the union of disclosed UTXOs grows much more slowly. With
+      <em>N</em>=3, each maker exposes at most 3 UTXOs per TTL window
+      regardless of how often it is probed, so the attacker's ability to
+      pre-build a complete known-UTXO database is sharply
+      throttled. Random TTLs prevent the attacker from synchronizing
+      probes with rotation events.
+    </p>
+
+    <h3>4.2 Initiation fee (<code>initiation_fee_sats</code>)</h3>
+    <p>
+      <strong>What it does:</strong> Each maker charges a small fee (in
+      sats) just to start the CoinJoin negotiation, paid regardless of
+      whether the transaction completes. Both honest and malicious takers
+      pay it.
+    </p>
+    <p>
+      <strong>Why it helps:</strong> It makes probing expensive. At 500
+      sats per maker with 100 makers, each full probe round costs 50,000
+      sats; at 10 rounds per day the attacker spends roughly 0.005 BTC/day.
+      It is purely economic: on its own it does <strong>not reduce
+      information leakage</strong>, but it forces the attacker into a
+      cost-vs-coverage trade-off and, combined with the sticky slot,
+      makes the per-bit-of-information cost rise sharply.
+    </p>
+
+    <h3>Individual effectiveness</h3>
+    <p>
+      The chart below shows each countermeasure's standalone impact
+      against the probing attack, tested at 8 makers per CoinJoin
+      over 1,000 rounds:
+    </p>
+
+    <div class="card">
+      <div class="chart"><div>                            <div id="9d7808b8-91e1-46b0-a6ba-46d658a28a24" class="plotly-graph-div" style="height:440px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("9d7808b8-91e1-46b0-a6ba-46d658a28a24")) {                    Plotly.newPlot(                        "9d7808b8-91e1-46b0-a6ba-46d658a28a24",                        [{"line":{"color":"#c7472d","dash":"solid","width":3},"marker":{"size":7},"mode":"lines+markers","name":"Baseline (no mitigations)","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.186459,0.320352,0.569061,0.483871,0.662531,0.832536],"type":"scatter"},{"line":{"color":"#5b8fb9","dash":"solid","width":2},"marker":{"size":7},"mode":"lines+markers","name":"Sticky offer slot, size=3","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.0,0.0,0.01632,0.034711,0.139089,0.264423],"type":"scatter"},{"line":{"color":"#1f7a8c","dash":"solid","width":2},"marker":{"size":7},"mode":"lines+markers","name":"Sticky offer slot, size=1","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.0,0.0,0.002861,0.001587,0.005051,0.014354],"type":"scatter"},{"line":{"color":"#2d8f6f","dash":"solid","width":2},"marker":{"size":7},"mode":"lines+markers","name":"Combined (light)","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.0,0.008805,0.008535,0.021488,0.043584,0.290698],"type":"scatter"},{"line":{"color":"#1a5276","dash":"solid","width":3},"marker":{"size":7},"mode":"lines+markers","name":"Combined (full)","x":[0.0,0.1,0.2,0.3,0.4,0.6,0.8],"y":[0.0,0.0,0.0,0.0,0.0,0.0,0.036036],"type":"scatter"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"yaxis":{"title":{"text":"All-maker input coverage"},"tickformat":".0%","range":[0,0.85]},"xaxis":{"title":{"text":"Attacker fraction"},"tickformat":".0%"},"margin":{"l":55,"r":25,"t":56,"b":55},"legend":{"orientation":"v","yanchor":"top","y":0.98,"x":0.02},"title":{"text":"Individual Countermeasure Effectiveness (8 Makers\u002fCoinJoin, 1000 Rounds)\u003cbr\u003e\u003csub\u003eInitiation-fee impact is covered separately in the cost section\u003c\u002fsub\u003e"},"height":440},                        {"responsive": true}                    )                };                            </script>        </div></div>
+
+      <table class="effect-table">
+        <tr>
+          <th>Countermeasure</th>
+          <th>Effect on all-maker input coverage (40% evil share)</th>
+          <th>Mechanism</th>
+        </tr>
+        <tr>
+          <td>Sticky offer slot, size=1</td>
+          <td class="effective">large reduction</td>
+          <td>Each maker exposes 1 UTXO per TTL window</td>
+        </tr>
+        <tr>
+          <td>Sticky offer slot, size=3</td>
+          <td class="effective">large reduction</td>
+          <td>Each maker exposes up to 3 UTXOs per TTL window</td>
+        </tr>
+        <tr>
+          <td>Initiation fee (500 sats)</td>
+          <td class="ineffective">modest reduction (cost lever only)</td>
+          <td>Raises probing cost but does not reduce per-probe leakage</td>
+        </tr>
+        <tr>
+          <td>Initiation fee (1000 sats)</td>
+          <td class="ineffective">modest reduction (cost lever only)</td>
+          <td>Raises probing cost but does not reduce per-probe leakage</td>
+        </tr>
+        <tr>
+          <td>Combined (slot=3 + 500 sat fee)</td>
+          <td class="effective">large reduction</td>
+          <td>Defense in depth: structural cap + economic friction</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout">
+      <p>
+        The structural lever &mdash; the timed sticky offer slot &mdash; is what
+        drives the all-maker input coverage metric down. Initiation fees alone
+        barely move the needle, but they raise the per-bit-of-information cost when
+        layered on top of a sticky slot. Long-running attacks (Section 5)
+        show that combining the structural and economic defenses matters,
+        because at very high probe intensity each one alone degrades over
+        time.
+      </p>
+    </div>
+
+    <!-- 5. THE RECOMMENDED POLICY -->
+    <h2>5. Recommended Policy</h2>
+
+    <p>
+      Rather than relying on any single countermeasure, we combine them
+      into a defense-in-depth policy. The recommended configuration is:
+    </p>
+
+    <div class="card">
+      <table class="param-table">
+        <tr>
+          <th>Parameter</th>
+          <th>Value</th>
+          <th>Purpose</th>
+        </tr>
+        <tr>
+          <td><code>offer_slot_size</code></td>
+          <td><code>3</code></td>
+          <td>Cap UTXOs per offer slot</td>
+        </tr>
+        <tr>
+          <td><code>slot_ttl_min_rounds</code></td>
+          <td><code>4</code></td>
+          <td>Minimum slot lifetime (sticky)</td>
+        </tr>
+        <tr>
+          <td><code>slot_ttl_max_rounds</code></td>
+          <td><code>20</code></td>
+          <td>Maximum slot lifetime (random rotation)</td>
+        </tr>
+        <tr>
+          <td><code>initiation_fee_sats</code></td>
+          <td><code>500</code></td>
+          <td>Economic deterrent</td>
+        </tr>
+        <tr>
+          <td><code>n_makers_per_coinjoin</code></td>
+          <td><code>8</code></td>
+          <td>Larger anonymity set</td>
+        </tr>
+        <tr>
+          <td><code>n_mixdepths</code></td>
+          <td><code>5</code></td>
+          <td>Wallet compartmentalization</td>
+        </tr>
+      </table>
+    </div>
+
+    <h3>Sustained attack resistance</h3>
+    <p>
+      We test the recommended policy under harsh conditions: 5,000 rounds
+      with a pre-probed attacker that snapshots every maker's offer slot
+      before the first honest CoinJoin. At low to moderate attacker
+      shares the recommended policy <strong>roughly halves the
+      all-maker input coverage rate</strong> versus the unmitigated baseline; at high
+      shares the absolute reduction stays meaningful but shrinks in
+      relative terms.
+    </p>
+
+    <div class="card">
+      <div class="chart"><div>                            <div id="bd3172c8-2c95-4b87-8b4b-67113875ceb9" class="plotly-graph-div" style="height:380px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("bd3172c8-2c95-4b87-8b4b-67113875ceb9")) {                    Plotly.newPlot(                        "bd3172c8-2c95-4b87-8b4b-67113875ceb9",                        [{"fill":"toself","fillcolor":"rgba(199,71,45,0.18)","hoverinfo":"skip","line":{"color":"rgba(0,0,0,0)"},"name":"Baseline (fee=0, no slot) (95% CI)","showlegend":false,"x":[0.1,0.2,0.4,0.6,0.6,0.4,0.2,0.1],"y":[0.482494,0.705722,0.752601,0.892208,0.810344,0.526402,0.433599,0.320411],"type":"scatter"},{"line":{"color":"#c7472d","width":3},"marker":{"size":9},"mode":"lines+markers","name":"Baseline (fee=0, no slot)","x":[0.1,0.2,0.4,0.6],"y":[0.401453,0.569661,0.639501,0.851276],"type":"scatter"},{"fill":"toself","fillcolor":"rgba(31,147,102,0.18)","hoverinfo":"skip","line":{"color":"rgba(0,0,0,0)"},"name":"Recommended (slot+fee=500) (95% CI)","showlegend":false,"x":[0.1,0.2,0.4,0.6,0.6,0.4,0.2,0.1],"y":[0.227658,0.306738,0.357832,0.697429,0.512167,0.263908,0.139318,0.143339],"type":"scatter"},{"line":{"color":"#1f9366","width":3},"marker":{"size":9},"mode":"lines+markers","name":"Recommended (slot+fee=500)","x":[0.1,0.2,0.4,0.6],"y":[0.185499,0.223028,0.31087,0.604798],"type":"scatter"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"yaxis":{"title":{"text":"All-maker input coverage"},"tickformat":".0%","range":[0,1]},"xaxis":{"title":{"text":"Attacker fraction"},"tickformat":".0%"},"margin":{"l":55,"r":25,"t":56,"b":55},"legend":{"orientation":"h","yanchor":"bottom","y":1.02,"x":0.0},"title":{"text":"Sustained Attack: Baseline vs Recommended (5000 Rounds, Pre-probed)"},"height":380},                        {"responsive": true}                    )                };                            </script>        </div></div>
+      <p>
+        At 10% attacker share, baseline ~40% vs recommended ~19%
+        all-maker input coverage; at 20% share, ~57% vs ~22%; at 40% share,
+        baseline 64.0% vs recommended
+        31.1%; at 60% share, ~85% vs ~60%.
+        Beyond about 100 probes/day or attacker shares above ~60%, the
+        gap narrows further (see Section 6) &mdash; defence-in-depth slows
+        UTXO leakage rather than abolishing it.
+      </p>
+    </div>
+
+    <!-- 6. ATTACK ECONOMICS -->
+    <h2>6. Attack Economics</h2>
+
+    <p>
+      Mitigations don't make the attack impossible — they make it more
+      expensive per unit of information extracted. The chart below
+      tracks final-day all-maker input coverage and attacker cost across probe
+      intensities for a 14-day attack window:
+    </p>
+
+    <div class="card">
+      <div class="chart"><div>                            <div id="119dae34-fbd5-4e20-80a0-a4074a5fb2e7" class="plotly-graph-div" style="height:420px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("119dae34-fbd5-4e20-80a0-a4074a5fb2e7")) {                    Plotly.newPlot(                        "119dae34-fbd5-4e20-80a0-a4074a5fb2e7",                        [{"fill":"toself","fillcolor":"rgba(199,71,45,0.18)","hoverinfo":"skip","line":{"color":"rgba(0,0,0,0)"},"name":"Baseline 95% CI","showlegend":false,"x":[1.0,2.0,5.0,10.0,20.0,50.0,50.0,20.0,10.0,5.0,2.0,1.0],"y":[0.893789,0.92693,0.939088,0.969922,0.977966,0.996041,0.915388,0.800891,0.724078,0.646626,0.563642,0.457354],"type":"scatter","xaxis":"x","yaxis":"y"},{"line":{"color":"#c7472d","width":3},"marker":{"size":8},"mode":"lines+markers","name":"Baseline: all-maker input coverage","x":[1.0,2.0,5.0,10.0,20.0,50.0],"y":[0.675571,0.745286,0.792857,0.847,0.889429,0.955714],"type":"scatter","xaxis":"x","yaxis":"y"},{"fill":"toself","fillcolor":"rgba(31,147,102,0.18)","hoverinfo":"skip","line":{"color":"rgba(0,0,0,0)"},"name":"Recommended 95% CI","showlegend":false,"x":[1.0,2.0,5.0,10.0,20.0,50.0,50.0,20.0,10.0,5.0,2.0,1.0],"y":[0.782398,0.797807,0.821265,0.855441,0.903321,0.961116,0.77717,0.550393,0.434844,0.34845,0.286479,0.270459],"type":"scatter","xaxis":"x","yaxis":"y"},{"line":{"color":"#1f9366","width":3},"marker":{"size":8},"mode":"lines+markers","name":"Recommended: all-maker input coverage","x":[1.0,2.0,5.0,10.0,20.0,50.0],"y":[0.526429,0.542143,0.584857,0.645143,0.726857,0.869143],"type":"scatter","xaxis":"x","yaxis":"y"},{"marker":{"color":"#2f557f","opacity":0.3},"name":"Attacker daily cost (BTC)","x":[1.0,2.0,5.0,10.0,20.0,50.0],"y":[0.0005,0.001,0.0025,0.005,0.01,0.025],"type":"bar","xaxis":"x","yaxis":"y2"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"xaxis":{"anchor":"y","domain":[0.0,0.94],"title":{"text":"Probe rounds per day"}},"yaxis":{"anchor":"x","domain":[0.0,1.0],"title":{"text":"All-maker input coverage"},"tickformat":".0%","range":[0,1]},"yaxis2":{"anchor":"x","overlaying":"y","side":"right","title":{"text":"Daily attacker cost (BTC)"}},"margin":{"l":55,"r":55,"t":56,"b":50},"legend":{"orientation":"h","yanchor":"bottom","y":1.02,"x":0.0},"title":{"text":"Probe Intensity: Privacy Impact and Attacker Cost"},"height":420},                        {"responsive": true}                    )                };                            </script>        </div></div>
+      <p>
+        The picture is sobering. Against the baseline, a single probe
+        round per day already drives final-day all-maker input coverage to
+        roughly <strong>84.7%</strong>, and 50
+        probes/day reaches <strong>~96%</strong>. Against the recommended
+        policy, the same intensities yield <strong>~53%</strong> and
+        <strong>~87%</strong> respectively &mdash; a real reduction, but far
+        from a fix. The attacker pays linearly with intensity (about
+        500 sats per probe round at the recommended fee, so 50
+        probes/day costs ~0.025 BTC/day), and the marginal information
+        per probe drops once the slot has been seen, but a patient
+        attacker still maps most of the network's UTXOs over a fortnight.
+      </p>
+    </div>
+
+    <div class="callout callout-warn">
+      <p>
+        <strong>Initiation fees alone are not enough.</strong> Even at
+        1,000 sats per maker, an attacker still achieves all-maker input
+        coverage for well over half of CoinJoins at moderate evil shares
+        in our 1,000-round runs.
+        Fees raise the per-probe cost but do not change what the
+        attacker learns. The real defence comes from the timed sticky
+        slot, which caps information-per-probe and forces the attacker
+        to pay again to learn anything new.
+      </p>
+    </div>
+
+    <!-- 7. RECOVERY -->
+    <h2>7. Recovery After an Attack</h2>
+
+    <p>
+      What happens when the attacker stops? As honest CoinJoins continue,
+      makers generate new UTXOs the attacker does not know about. The
+      attacker's database becomes stale and identification rates drop.
+    </p>
+
+    <div class="card">
+      <div class="chart"><div>                            <div id="1d71ad41-363f-4d17-bd9d-0c26bb2225e8" class="plotly-graph-div" style="height:400px; width:100%;"></div>            <script type="text/javascript">                                    window.PLOTLYENV=window.PLOTLYENV || {};                                    if (document.getElementById("1d71ad41-363f-4d17-bd9d-0c26bb2225e8")) {                    Plotly.newPlot(                        "1d71ad41-363f-4d17-bd9d-0c26bb2225e8",                        [{"fill":"tozeroy","fillcolor":"rgba(199, 71, 45, 0.08)","line":{"color":"#c7472d","width":3},"mode":"lines","name":"Baseline","x":[0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0,17.0,18.0,19.0,20.0,21.0,22.0,23.0,24.0,25.0,26.0,27.0,28.0,29.0,30.0,31.0,32.0,33.0,34.0,35.0,36.0,37.0,38.0,39.0,40.0,41.0,42.0,43.0],"y":[1.0,1.0,1.0,1.0,1.0,1.0,1.0,0.99,0.99,0.99,0.98,0.96,0.96,0.97,0.86,0.77,0.39,0.41,0.17,0.07,0.06,0.03,0.06,0.04,0.04,0.05,0.03,0.01,0.0,0.01,0.01,0.03,0.02,0.02,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"type":"scatter"},{"line":{"color":"#1f9366","width":3},"mode":"lines","name":"Recommended","x":[0.0,1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0,15.0,16.0,17.0,18.0,19.0,20.0,21.0,22.0,23.0,24.0,25.0,26.0,27.0,28.0,29.0,30.0,31.0,32.0,33.0,34.0,35.0,36.0,37.0,38.0,39.0,40.0,41.0,42.0,43.0],"y":[1.0,1.0,1.0,1.0,0.99,1.0,1.0,0.9,0.91,0.95,0.95,0.55,0.56,0.59,0.34,0.29,0.26,0.17,0.09,0.04,0.03,0.02,0.03,0.02,0.0,0.03,0.02,0.03,0.01,0.03,0.03,0.01,0.01,0.01,0.0,0.02,0.05,0.0,0.0,0.0,0.0,0.0,0.01,0.01],"type":"scatter"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmapgl":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmapgl"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermapbox":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermapbox"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","mapbox":{"style":"light"},"paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"shapes":[{"line":{"color":"#667085","dash":"dash"},"type":"line","x0":14,"x1":14,"xref":"x","y0":0,"y1":1,"yref":"y domain"}],"annotations":[{"showarrow":false,"text":"Attack ends","x":14,"xanchor":"left","xref":"x","y":1,"yanchor":"top","yref":"y domain"}],"yaxis":{"title":{"text":"All-maker input coverage"},"tickformat":".0%","range":[0,1]},"margin":{"l":55,"r":30,"t":56,"b":50},"legend":{"orientation":"h","yanchor":"bottom","y":1.02,"x":0.0},"title":{"text":"Recovery After a 14-Day Attack (20 Probes\u002fDay)"},"xaxis":{"title":{"text":"Day"}},"height":400},                        {"responsive": true}                    )                };                            </script>        </div></div>
+      <p>
+        After a 14-day attack at 20 probes/day, the baseline takes
+        until approximately day 21 to recover below 5%
+        all-maker input coverage, and the recommended policy recovers only
+        marginally faster (around 19 days versus 21 in our runs). The
+        recommended policy's main benefit is starting recovery from a
+        lower peak, not accelerating the recovery itself: rotation of
+        the offer slot is what eventually flushes the attacker's
+        database, and that proceeds at the same rate either way.
+      </p>
+    </div>
+
+    <!-- 8. KEY TAKEAWAYS -->
+    <h2>8. Key Takeaways</h2>
+
+    <div class="card">
+      <ol style="margin: 0; padding-left: 20px; color: var(--ink-soft);">
+        <li style="margin-bottom: 8px;">
+          <strong>CoinJoin probing is a real privacy threat.</strong>
+          Without countermeasures, a moderately resourced attacker
+          can identify all makers in a substantial fraction of honest CoinJoins
+          through the information cascade triggered by probing. This is
+          a necessary precondition for full taker deanonymization (which
+          additionally requires on-chain clustering &mdash; see the companion
+          <a href="mainnet-deanon.html">mainnet-deanon study</a>). In our
+          5,000-round sustained-attack runs, the baseline all-maker input
+          coverage climbs to roughly 40% at 10% attacker share and 64% at
+          40% attacker share, with an 85%+ tail at 60% attacker share.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>The timed sticky offer slot is the structural lever:</strong>
+          capping the offer to <em>N</em> UTXOs and holding it fixed for a
+          random TTL (<code>offer_slot_size</code> +
+          <code>slot_ttl_*</code>) directly limits how much an attacker can
+          learn per maker per time window. Re-probing within the TTL
+          yields no new information, breaking the "probe everything every
+          day" strategy without requiring per-attempt economic friction.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>Initiation fees are necessary but not sufficient.</strong>
+          They raise the attacker's cost but do not stop the information
+          leakage. Fees only make sense as a complement to
+          information-limiting measures.
+        </li>
+        <li style="margin-bottom: 8px;">
+          <strong>The recommended policy combines two layers.</strong>
+          The timed sticky slot caps information leakage per probe (structural
+          defence); the initiation fee raises the attacker's per-probe cost
+          (economic friction). Under sustained, pre-probed, multi-thousand-round
+          attacks this combination roughly halves the all-maker input
+          coverage rate compared to the baseline. That is a meaningful
+          improvement, but a determined long-running attacker can still
+          map a notable fraction of the network's UTXOs &mdash; defence
+          in depth is necessary, not optional.
+        </li>
+        <li>
+          <strong>Recovery is slow either way.</strong>
+          After a 2-week attack ends, both baseline and recommended
+          policies need roughly 19-21 days to recover below 5%
+          all-maker input coverage in our runs. The recommended policy's win is
+          starting recovery from a lower peak, not converging faster:
+          recovery rate is set by how quickly makers naturally rotate
+          their slot UTXOs, which is independent of the policy in
+          place.
+        </li>
+      </ol>
+    </div>
+
+    <p class="footer">
+      Simulation source and raw data:
+      <a href="https://github.com/joinmarket-ng/coinjoin-simulator">github.com/joinmarket-ng/coinjoin-simulator</a>
+      | Curated dataset: <a href="publish_summary.json">publish_summary.json</a>
+      | Generated 2026-05-21
+    </p>
+
+  </main>
+</body>
+</html>

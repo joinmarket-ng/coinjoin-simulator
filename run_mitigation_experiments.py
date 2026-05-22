@@ -3,7 +3,8 @@
 
 Generates a comprehensive grid of experiments varying:
 - makers_per_cj (8, 10)
-- mitigations (baseline, max_utxos, sticky, flagged, initiation_fee, combined)
+- mitigations (baseline, slot_size_1, slot_size_3, initiation_500,
+  initiation_1000, combined_light, combined_full)
 - n_mixdepths (3, 5, 8)
 - evil_taker_fraction (0.0 to 0.8)
 
@@ -23,7 +24,21 @@ from coinjoin_simulator.network import (
     RealisticNetworkSimulator,
     extract_bonded_maker_profiles,
     fetch_orderbook_snapshot,
+    load_orderbook_snapshot,
 )
+
+
+ORDERBOOK_CACHE_PATH = "data/orderbook_live_snapshot.json"
+
+
+def _load_snapshot() -> dict[str, object]:
+    import os
+
+    if os.path.exists(ORDERBOOK_CACHE_PATH):
+        print(f"Loading cached orderbook from {ORDERBOOK_CACHE_PATH}...")
+        return load_orderbook_snapshot(ORDERBOOK_CACHE_PATH)
+    print("Fetching live orderbook...")
+    return fetch_orderbook_snapshot(url=DEFAULT_ORDERBOOK_URL)
 
 
 def _run_experiment(
@@ -46,8 +61,7 @@ def _run_experiment(
 
 
 def main() -> None:
-    print("Fetching live orderbook...")
-    snapshot = fetch_orderbook_snapshot(url=DEFAULT_ORDERBOOK_URL)
+    snapshot = _load_snapshot()
     profiles = extract_bonded_maker_profiles(snapshot)
     print(f"  {len(profiles)} bonded maker profiles loaded")
 
@@ -60,26 +74,21 @@ def main() -> None:
     # Mitigation configurations
     mitigation_configs: list[tuple[str, dict[str, object]]] = [
         ("baseline", {}),
-        ("max_utxos_1", {"max_utxos_per_offer": 1}),
-        ("max_utxos_3", {"max_utxos_per_offer": 3}),
-        ("sticky", {"sticky_disclosed_utxos": True}),
-        ("flagged", {"flagged_utxo_isolation": True}),
+        ("slot_size_1", {"offer_slot_size": 1}),
+        ("slot_size_3", {"offer_slot_size": 3}),
         ("initiation_500", {"initiation_fee_sats": 500}),
         ("initiation_1000", {"initiation_fee_sats": 1000}),
         (
             "combined_light",
             {
-                "max_utxos_per_offer": 3,
-                "sticky_disclosed_utxos": True,
+                "offer_slot_size": 3,
                 "initiation_fee_sats": 500,
             },
         ),
         (
             "combined_full",
             {
-                "max_utxos_per_offer": 1,
-                "sticky_disclosed_utxos": True,
-                "flagged_utxo_isolation": True,
+                "offer_slot_size": 1,
                 "initiation_fee_sats": 1000,
             },
         ),
@@ -127,9 +136,7 @@ def main() -> None:
         (
             "combined_full",
             {
-                "max_utxos_per_offer": 1,
-                "sticky_disclosed_utxos": True,
-                "flagged_utxo_isolation": True,
+                "offer_slot_size": 1,
                 "initiation_fee_sats": 1000,
             },
         ),

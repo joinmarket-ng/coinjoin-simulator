@@ -42,12 +42,12 @@ def test_build_publish_payload_extracts_compact_metrics(tmp_path: Path) -> None:
             "mean_taker_anon_set": 1.3,
         },
         {
-            "label": "mpc8_max_utxos_3_evil0.4",
+            "label": "mpc8_slot_size_3_evil0.4",
             "taker_deanonymized_fraction": 0.0,
             "mean_taker_anon_set": 9.0,
         },
         {
-            "label": "mpc8_max_utxos_3_evil0.6",
+            "label": "mpc8_slot_size_3_evil0.6",
             "taker_deanonymized_fraction": 0.0,
             "mean_taker_anon_set": 8.9,
         },
@@ -226,7 +226,9 @@ def test_build_publish_payload_extracts_compact_metrics(tmp_path: Path) -> None:
 
     findings = payload["key_findings"]
     assert isinstance(findings, dict)
-    assert findings["baseline_deanon_evil_04"] == 0.8
+    # baseline series filters at fee=0 (true unmitigated): evil=0.4 -> 0.85
+    assert findings["baseline_deanon_evil_04"] == 0.85
+    # recommended series filters at fee=500
     assert findings["recommended_deanon_evil_04"] == 0.0
     assert findings["baseline_deanon_10_probes"] == 0.88
     assert findings["daily_cost_10_probes_btc"] == 0.005
@@ -238,7 +240,15 @@ def test_build_publish_payload_extracts_compact_metrics(tmp_path: Path) -> None:
     assert isinstance(individual, dict)
     assert individual["target_makers_per_coinjoin"] == 8
 
-    assert "longrun_fee0" in payload
-    longrun_fee0 = payload["longrun_fee0"]
-    assert isinstance(longrun_fee0, dict)
-    assert longrun_fee0["target_fee_sats"] == 0
+    longrun = payload["longrun"]
+    assert isinstance(longrun, dict)
+    assert longrun["policy_fees"] == {"baseline": 0, "recommended": 500}
+    longrun_series = longrun["series"]
+    assert isinstance(longrun_series, dict)
+    baseline_longrun = longrun_series["baseline"]
+    assert isinstance(baseline_longrun, dict)
+    # Mean over single seed at fee=0 for baseline at evil=0.2 is 0.75
+    assert baseline_longrun["deanon"] == [0.75, 0.85]
+    # CI bands collapse to mean for n=1 seed
+    assert baseline_longrun["deanon_lo"] == [0.75, 0.85]
+    assert baseline_longrun["deanon_hi"] == [0.75, 0.85]

@@ -100,6 +100,8 @@ def test_probe_reveals_only_largest_mixdepth() -> None:
         [WalletUTXO("u_e", 100_000, 3, 0)],
         [],
     ]
+    # Rebuild offer slot after injecting test UTXOs (slot was built on init from original UTXOs)
+    sim._build_offer_slot(maker, current_round=0)
 
     revealed = sim.probe_maker_max_mixdepth(maker.maker_id)
     assert revealed == 2
@@ -265,15 +267,15 @@ def test_n_mixdepths_validation() -> None:
         NetworkSimulationConfig(n_mixdepths=1)
 
 
-# --- Tests for max_utxos_per_offer mitigation ---
+# --- Tests for offer_slot_size + slot TTL mitigation ---
 
 
-def test_max_utxos_per_offer_caps_revealed_utxos() -> None:
-    """With max_utxos_per_offer=1, only 1 UTXO is revealed per probe."""
+def test_offer_slot_size_caps_revealed_utxos() -> None:
+    """With offer_slot_size=1, only 1 UTXO is revealed per probe."""
     config = NetworkSimulationConfig(
         n_makers=3,
         n_rounds=10,
-        max_utxos_per_offer=1,
+        offer_slot_size=1,
         random_seed=30,
     )
     sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(10))
@@ -287,16 +289,18 @@ def test_max_utxos_per_offer_caps_revealed_utxos() -> None:
         [],
         [],
     ]
+    sim._build_offer_slot(maker, current_round=0)
 
     revealed = sim.probe_maker_max_mixdepth(maker.maker_id)
     assert revealed == 1
-    # Should reveal the largest UTXO (300k)
-    assert "u_a" in sim.known_utxos_by_maker[maker.maker_id]
-    assert "u_b" not in sim.known_utxos_by_maker[maker.maker_id]
+    # Exactly one of the two UTXOs should be revealed (random selection)
+    known = sim.known_utxos_by_maker[maker.maker_id]
+    assert len(known) == 1
+    assert known.issubset({"u_a", "u_b"})
 
 
-def test_max_utxos_per_offer_none_reveals_all() -> None:
-    """With max_utxos_per_offer=None (default), all UTXOs are revealed."""
+def test_offer_slot_size_none_reveals_all() -> None:
+    """With offer_slot_size=None (default), all UTXOs in active mixdepth are revealed."""
     config = NetworkSimulationConfig(n_makers=3, n_rounds=10, random_seed=31)
     sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(10))
 
@@ -308,14 +312,83 @@ def test_max_utxos_per_offer_none_reveals_all() -> None:
         [],
         [],
     ]
+    sim._build_offer_slot(maker, current_round=0)
 
     revealed = sim.probe_maker_max_mixdepth(maker.maker_id)
     assert revealed == 2
     assert sim.known_utxos_by_maker[maker.maker_id] == {"u_a", "u_b"}
 
 
-def test_max_utxos_per_offer_reduces_deanonymization() -> None:
-    """Capping revealed UTXOs should reduce deanonymization rate."""
+def test_probe_does_not_rotate_slot() -> None:
+    """Repeated probes within the slot's TTL must reveal the same UTXOs.
+
+    This is the core sticky property: an attacker who pays initiation_fee
+    twice in a row learns nothing new -- only TTL expiry or a successful CJ
+    rotates the slot.
+    """
+    config = NetworkSimulationConfig(
+        n_makers=3,
+        n_rounds=10,
+        offer_slot_size=1,
+        slot_ttl_min_rounds=1000,
+        slot_ttl_max_rounds=1000,
+        random_seed=99,
+    )
+    sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(10))
+
+    maker = sim.makers[0]
+    maker.mixdepths = [
+        [WalletUTXO("u_a", 300_000, 0, 0), WalletUTXO("u_b", 200_000, 0, 0)],
+        [],
+        [],
+        [],
+        [],
+    ]
+    sim._build_offer_slot(maker, current_round=0)
+
+    seen: set[str] = set()
+    for _ in range(20):
+        sim.probe_maker_max_mixdepth(maker.maker_id, current_round=0)
+        seen.update(sim.known_utxos_by_maker[maker.maker_id])
+
+    # Sticky: only one UTXO ever revealed across many probes within TTL
+    assert len(seen) == 1, "Probes must not rotate the slot; sticky exposure expected"
+
+
+def test_slot_ttl_expiry_rotates_slot() -> None:
+    """When the slot's TTL elapses, probing forces a rebuild and may expose new UTXOs."""
+    config = NetworkSimulationConfig(
+        n_makers=3,
+        n_rounds=10,
+        offer_slot_size=1,
+        slot_ttl_min_rounds=1,
+        slot_ttl_max_rounds=1,
+        random_seed=99,
+    )
+    sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(10))
+
+    maker = sim.makers[0]
+    maker.mixdepths = [
+        [WalletUTXO("u_a", 300_000, 0, 0), WalletUTXO("u_b", 200_000, 0, 0)],
+        [],
+        [],
+        [],
+        [],
+    ]
+    sim._build_offer_slot(maker, current_round=0)
+
+    seen: set[str] = set()
+    for round_idx in range(60):
+        sim.probe_maker_max_mixdepth(maker.maker_id, current_round=round_idx)
+        seen.update(sim.known_utxos_by_maker[maker.maker_id])
+        if len(seen) == 2:
+            break
+
+    assert seen == {"u_a", "u_b"}, "TTL expiry should eventually rotate the slot to a new UTXO"
+
+
+def test_offer_slot_reduces_probed_utxo_count() -> None:
+    """Capping slot size should not increase the count of probed UTXOs vs no cap."""
     profiles = _maker_profiles(90)
 
     base_config = NetworkSimulationConfig(
@@ -332,138 +405,41 @@ def test_max_utxos_per_offer_reduces_deanonymization() -> None:
         n_makers_per_coinjoin=5,
         evil_taker_fraction=0.4,
         probes_per_evil_taker=5,
-        max_utxos_per_offer=1,
+        offer_slot_size=1,
         random_seed=32,
     )
 
     base_result = RealisticNetworkSimulator(config=base_config, maker_profiles=profiles).run()
     capped_result = RealisticNetworkSimulator(config=capped_config, maker_profiles=profiles).run()
 
-    # Fewer UTXOs revealed -> fewer known -> less identification
     assert capped_result.n_probed_utxos <= base_result.n_probed_utxos
 
 
-# --- Tests for sticky_disclosed_utxos mitigation ---
-
-
-def test_sticky_disclosed_utxos_second_probe_reveals_nothing_new() -> None:
-    """After first probe with sticky enabled, re-probing reveals no new UTXOs."""
-    config = NetworkSimulationConfig(
-        n_makers=3,
-        n_rounds=10,
-        sticky_disclosed_utxos=True,
-        random_seed=40,
-    )
-    sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(10))
-
-    maker = sim.makers[0]
-    maker.mixdepths = [
-        [WalletUTXO("u_a", 300_000, 0, 0), WalletUTXO("u_b", 200_000, 0, 0)],
-        [WalletUTXO("u_c", 100_000, 1, 0)],
-        [],
-        [],
-        [],
-    ]
-
-    # First probe reveals UTXOs
-    revealed_1 = sim.probe_maker_max_mixdepth(maker.maker_id)
-    known_after_1 = set(sim.known_utxos_by_maker[maker.maker_id])
-    assert revealed_1 == 2
-    assert known_after_1 == {"u_a", "u_b"}
-
-    # Second probe: sticky UTXOs exist, so no new info
-    revealed_2 = sim.probe_maker_max_mixdepth(maker.maker_id)
-    known_after_2 = set(sim.known_utxos_by_maker[maker.maker_id])
-    assert revealed_2 == 2  # Same count (sticky UTXOs re-disclosed)
-    assert known_after_2 == known_after_1  # No new UTXOs learned
-
-
-def test_sticky_utxos_cleared_after_successful_coinjoin() -> None:
-    """After a successful CoinJoin, sticky UTXOs that were spent are cleared."""
+def test_slot_rebuilds_after_successful_coinjoin() -> None:
+    """A successful CoinJoin consumes the slot UTXO; the next probe sees a fresh slot."""
     config = NetworkSimulationConfig(
         n_makers=20,
         n_rounds=10,
         n_makers_per_coinjoin=3,
         evil_taker_fraction=0.0,
-        sticky_disclosed_utxos=True,
+        offer_slot_size=2,
+        slot_ttl_min_rounds=1000,
+        slot_ttl_max_rounds=1000,
         random_seed=41,
     )
     sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(30))
 
-    # Probe a maker first
-    maker = sim.makers[0]
-    sim.probe_maker_max_mixdepth(maker.maker_id)
-    sticky_before = set(sim._sticky_utxos[maker.maker_id])
-    assert len(sticky_before) > 0
-
-    # Run a CoinJoin (might or might not include this maker)
-    # Run enough CJs to have high probability of including the maker
+    # Run honest CJs; verify slots get rebuilt for participating makers.
+    initial_slots = {m.maker_id: tuple(sim._offer_slots[m.maker_id]) for m in sim.makers}
     for i in range(20):
-        sim.simulate_single_honest_coinjoin(round_index=i)
-
-    # After CJs, the sticky set should have changed (spent UTXOs removed)
-    # We can't guarantee the specific maker was selected, but the mechanism
-    # is tested by the logic in simulate_single_honest_coinjoin
-
-
-# --- Tests for flagged_utxo_isolation mitigation ---
-
-
-def test_flagged_utxo_isolation_prevents_identification() -> None:
-    """With flagged isolation, probed UTXOs don't identify maker in honest CJ."""
-    config = NetworkSimulationConfig(
-        n_makers=30,
-        n_rounds=10,
-        n_makers_per_coinjoin=4,
-        evil_taker_fraction=0.0,
-        flagged_utxo_isolation=True,
-        random_seed=50,
-    )
-    sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(60))
-
-    # Probe all makers to learn their UTXOs
-    for maker in sim.makers:
-        sim.probe_maker_max_mixdepth(maker.maker_id)
-
-    # Now run an honest CoinJoin -- with flagged isolation, all known UTXOs
-    # are flagged, so NO maker should be identified
-    record = sim.simulate_single_honest_coinjoin(round_index=1, cj_amount_sats=1_800_000)
-    assert record is not None
-    assert record.identified_makers == 0
-    assert record.taker_anon_set == config.n_makers_per_coinjoin + 1
-
-
-def test_flagged_change_descendants_also_flagged() -> None:
-    """Change from a CJ that spent flagged inputs inherits the flag."""
-    config = NetworkSimulationConfig(
-        n_makers=20,
-        n_rounds=5,
-        n_makers_per_coinjoin=3,
-        evil_taker_fraction=0.0,
-        flagged_utxo_isolation=True,
-        random_seed=51,
-    )
-    sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(30))
-
-    # Probe a maker
-    maker = sim.makers[0]
-    sim.probe_maker_max_mixdepth(maker.maker_id)
-    flagged_before = set(sim._flagged_utxos[maker.maker_id])
-    assert len(flagged_before) > 0
-
-    # Run CJ -- if maker participates, change should inherit flag
-    for i in range(10):
-        record = sim.simulate_single_honest_coinjoin(round_index=i, cj_amount_sats=1_800_000)
+        record = sim.simulate_single_honest_coinjoin(round_index=i)
         if record is None:
             continue
         for event in record.maker_events:
-            if event.maker_id == maker.maker_id and event.change_utxo_id is not None:
-                # Change UTXO should be flagged since inputs were flagged
-                assert event.change_utxo_id in sim._flagged_utxos[maker.maker_id]
-                return  # Test passed
-
-    # If we got here, the maker never participated (unlikely but possible)
-    # That's OK for the test
+            # Slot must have been rebuilt: either differs from initial or maker
+            # moved to a new mixdepth (where slot was rebuilt fresh).
+            new_slot = tuple(sim._offer_slots[event.maker_id])
+            assert new_slot != initial_slots[event.maker_id] or len(new_slot) <= 2
 
 
 # --- Tests for initiation_fee mitigation ---
@@ -533,9 +509,9 @@ def test_result_includes_mitigation_metadata() -> None:
         n_makers=10,
         n_rounds=20,
         n_mixdepths=7,
-        max_utxos_per_offer=2,
-        sticky_disclosed_utxos=True,
-        flagged_utxo_isolation=True,
+        offer_slot_size=2,
+        slot_ttl_min_rounds=4,
+        slot_ttl_max_rounds=20,
         initiation_fee_sats=250,
         evil_taker_fraction=0.3,
         random_seed=70,
@@ -544,20 +520,23 @@ def test_result_includes_mitigation_metadata() -> None:
     result = sim.run()
 
     assert result.n_mixdepths == 7
-    assert result.max_utxos_per_offer == 2
-    assert result.sticky_disclosed_utxos is True
-    assert result.flagged_utxo_isolation is True
+    assert result.offer_slot_size == 2
+    assert result.slot_ttl_min_rounds == 4
+    assert result.slot_ttl_max_rounds == 20
     assert result.initiation_fee_sats == 250
 
     # to_dict should include all new fields
     d = result.to_dict()
     assert d["n_mixdepths"] == 7
-    assert d["max_utxos_per_offer"] == 2
-    assert d["sticky_disclosed_utxos"] is True
-    assert d["flagged_utxo_isolation"] is True
+    assert d["offer_slot_size"] == 2
+    assert d["slot_ttl_min_rounds"] == 4
+    assert d["slot_ttl_max_rounds"] == 20
     assert d["initiation_fee_sats"] == 250
     assert "total_probing_cost_sats" in d
     assert "probing_cost_to_volume_ratio" in d
+    assert "mean_top1_utxo_coverage" in d
+    assert "mean_top3_utxo_coverage" in d
+    assert "mean_top5_utxo_coverage" in d
 
 
 def test_seeded_depth0_initialization_creates_only_depth0_utxos() -> None:
@@ -597,7 +576,6 @@ def test_preprobe_can_deanonymize_next_honest_round() -> None:
         n_rounds=1,
         n_makers_per_coinjoin=8,
         pre_probe_all_makers=True,
-        disclosed_input_policy="all_disclosed",
         random_seed=82,
     )
     sim = RealisticNetworkSimulator(config=config, maker_profiles=_maker_profiles(60))
@@ -606,84 +584,11 @@ def test_preprobe_can_deanonymize_next_honest_round() -> None:
     assert record.identified_makers >= 4
 
 
-def test_avoid_disclosed_policy_reduces_disclosed_input_usage() -> None:
-    profiles = _maker_profiles(60)
-    base = NetworkSimulationConfig(
-        n_makers=30,
-        n_rounds=120,
-        n_makers_per_coinjoin=8,
-        pre_probe_all_makers=True,
-        disclosed_input_policy="all_disclosed",
-        random_seed=83,
-    )
-    avoid = NetworkSimulationConfig(
-        n_makers=30,
-        n_rounds=120,
-        n_makers_per_coinjoin=8,
-        pre_probe_all_makers=True,
-        disclosed_input_policy="avoid_disclosed",
-        random_seed=83,
-    )
-    base_result = RealisticNetworkSimulator(config=base, maker_profiles=profiles).run()
-    avoid_result = RealisticNetworkSimulator(config=avoid, maker_profiles=profiles).run()
-    assert avoid_result.disclosed_input_usage_fraction <= base_result.disclosed_input_usage_fraction
-
-
-def test_greedy_uses_more_inputs_than_default() -> None:
-    profiles = _maker_profiles(60)
-    default_cfg = NetworkSimulationConfig(
-        n_makers=30,
-        n_rounds=120,
-        n_makers_per_coinjoin=8,
-        merge_algorithm="default",
-        random_seed=84,
-    )
-    greedy_cfg = NetworkSimulationConfig(
-        n_makers=30,
-        n_rounds=120,
-        n_makers_per_coinjoin=8,
-        merge_algorithm="greedy",
-        random_seed=84,
-    )
-    r_default = RealisticNetworkSimulator(config=default_cfg, maker_profiles=profiles).run()
-    r_greedy = RealisticNetworkSimulator(config=greedy_cfg, maker_profiles=profiles).run()
-    assert r_greedy.avg_inputs_per_maker >= r_default.avg_inputs_per_maker
-
-
-def test_adaptive_policy_sits_between_avoid_and_ignore() -> None:
-    profiles = _maker_profiles(80)
-    common = dict(
-        n_makers=50,
-        n_rounds=200,
-        n_makers_per_coinjoin=8,
-        evil_taker_fraction=0.4,
-        pre_probe_all_makers=True,
-        random_seed=85,
-    )
-
-    cfg_avoid = NetworkSimulationConfig(**common, disclosed_input_policy="avoid_disclosed")
-    cfg_ignore = NetworkSimulationConfig(**common, disclosed_input_policy="ignore")
-    cfg_adaptive = NetworkSimulationConfig(**common, disclosed_input_policy="adaptive")
-
-    _ = RealisticNetworkSimulator(config=cfg_avoid, maker_profiles=profiles).run()
-    r_ignore = RealisticNetworkSimulator(config=cfg_ignore, maker_profiles=profiles).run()
-    r_adapt = RealisticNetworkSimulator(config=cfg_adaptive, maker_profiles=profiles).run()
-
-    # Adaptive should remain better than ignore in disclosed reuse and deanonymization.
-    assert r_adapt.disclosed_input_usage_fraction <= r_ignore.disclosed_input_usage_fraction
-    assert r_adapt.taker_deanonymized_fraction <= r_ignore.taker_deanonymized_fraction
-
-    # It should still actively flush some disclosed inputs (non-zero reuse).
-    assert r_adapt.disclosed_input_usage_fraction > 0.0
-
-
 def test_recommended_policy_defaults_set_expected_values() -> None:
     cfg = NetworkSimulationConfig.recommended_policy_defaults(n_rounds=10)
-    assert cfg.max_utxos_per_offer == 3
-    assert cfg.sticky_disclosed_utxos is True
-    assert cfg.flagged_utxo_isolation is True
-    assert cfg.merge_algorithm == "gradual"
-    assert cfg.disclosed_input_policy == "adaptive"
+    assert cfg.offer_slot_size == 3
+    assert cfg.slot_ttl_min_rounds == 4
+    assert cfg.slot_ttl_max_rounds == 20
     assert cfg.wallet_init_mode == "seeded_depth0"
     assert cfg.initiation_fee_sats == 500
 

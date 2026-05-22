@@ -82,6 +82,44 @@ def _average_pairs(points: dict[float, list[float]]) -> tuple[list[float], list[
     return x_values, y_values
 
 
+def _stats_pairs(
+    points: dict[float, list[float]],
+) -> tuple[list[float], list[float], list[float], list[float], list[int]]:
+    """Return (x, mean, ci_low, ci_high, n) using normal-approximation 95% CI.
+
+    For n<2 the half-width is 0 so ci_low == ci_high == mean.
+    """
+    import math
+
+    x_values = sorted(points.keys())
+    means: list[float] = []
+    lows: list[float] = []
+    highs: list[float] = []
+    ns: list[int] = []
+    for x_value in x_values:
+        values = points[x_value]
+        n = len(values)
+        ns.append(n)
+        if n == 0:
+            means.append(0.0)
+            lows.append(0.0)
+            highs.append(0.0)
+            continue
+        mean = sum(values) / n
+        means.append(mean)
+        if n < 2:
+            lows.append(mean)
+            highs.append(mean)
+            continue
+        var = sum((v - mean) ** 2 for v in values) / (n - 1)
+        sem = math.sqrt(var / n)
+        # 95% CI normal approximation; small-sample t-correction skipped (1.96 vs ~2.78 at n=5).
+        half = 1.96 * sem
+        lows.append(mean - half)
+        highs.append(mean + half)
+    return x_values, means, lows, highs, ns
+
+
 def _round_list(values: list[float], digits: int = 6) -> list[float]:
     return [round(v, digits) for v in values]
 
@@ -106,7 +144,7 @@ def build_mitigation_series(
     rows: list[dict[str, object]],
     target_mpc: int = 8,
     target_mixdepths: int = 5,
-    mitigations: tuple[str, ...] = ("baseline", "max_utxos_3", "combined_full"),
+    mitigations: tuple[str, ...] = ("baseline", "slot_size_3", "combined_full"),
     include_depth_labels: bool = False,
 ) -> dict[str, dict[str, list[float]]]:
     """Build deanonymization and anon-set series for selected mitigations."""
@@ -157,10 +195,20 @@ def build_mitigation_series(
 
 def build_longrun_series(
     rows: list[dict[str, object]],
-    fee_sats: int = 500,
+    policy_fees: dict[str, int] | None = None,
     policies: tuple[str, ...] = ("baseline", "recommended"),
 ) -> dict[str, dict[str, list[float]]]:
-    """Build sustained long-run attack series by policy."""
+    """Build sustained long-run attack series by policy.
+
+    `policy_fees` maps each policy name to the `initiation_fee_sats` value to
+    keep. The default is baseline=0 (truly unmitigated) and recommended=500
+    (cost lever applied on top of the timed sticky offer slot). Rows that do
+    not match are skipped. Multiple seeds per (policy, evil) are aggregated
+    as mean with a 95% CI band (`deanon_lo`/`deanon_hi`).
+    """
+    fee_filter: dict[str, int] = (
+        {"baseline": 0, "recommended": 500} if policy_fees is None else dict(policy_fees)
+    )
     grouped_deanon: dict[str, dict[float, list[float]]] = {policy: {} for policy in policies}
     grouped_anon: dict[str, dict[float, list[float]]] = {policy: {} for policy in policies}
 
@@ -168,7 +216,10 @@ def build_longrun_series(
         policy = row.get("policy_name")
         if not isinstance(policy, str) or policy not in grouped_deanon:
             continue
-        if _coerce_int(row.get("initiation_fee_sats")) != fee_sats:
+        expected_fee = fee_filter.get(policy)
+        if expected_fee is None:
+            continue
+        if _coerce_int(row.get("initiation_fee_sats")) != expected_fee:
             continue
 
         evil = _coerce_float(row.get("evil_taker_fraction"))
@@ -180,14 +231,19 @@ def build_longrun_series(
 
     output: dict[str, dict[str, list[float]]] = {}
     for policy in policies:
-        evil_values, deanon_values = _average_pairs(grouped_deanon[policy])
-        evil_values_anon, anon_values = _average_pairs(grouped_anon[policy])
+        evil_values, deanon_mean, deanon_lo, deanon_hi, ns = _stats_pairs(grouped_deanon[policy])
+        evil_values_anon, anon_mean, anon_lo, anon_hi, _ = _stats_pairs(grouped_anon[policy])
         if evil_values != evil_values_anon:
             raise ValueError("inconsistent long-run aggregation state")
         output[policy] = {
             "evil_fractions": _round_list(evil_values),
-            "deanon": _round_list(deanon_values),
-            "mean_anon_set": _round_list(anon_values),
+            "deanon": _round_list(deanon_mean),
+            "deanon_lo": _round_list(deanon_lo),
+            "deanon_hi": _round_list(deanon_hi),
+            "mean_anon_set": _round_list(anon_mean),
+            "mean_anon_set_lo": _round_list(anon_lo),
+            "mean_anon_set_hi": _round_list(anon_hi),
+            "n_seeds": [float(n) for n in ns],
         }
     return output
 
@@ -196,16 +252,16 @@ def build_intensity_series(
     rows: list[dict[str, object]],
     policies: tuple[str, ...] = ("baseline", "recommended"),
 ) -> dict[str, dict[str, list[float]]]:
-    """Build probe-intensity series by policy."""
-    grouped_deanon: dict[str, dict[int, list[float]]] = {policy: {} for policy in policies}
-    grouped_cost: dict[str, dict[int, list[float]]] = {policy: {} for policy in policies}
+    """Build probe-intensity series by policy with mean + 95% CI bands."""
+    grouped_deanon: dict[str, dict[float, list[float]]] = {policy: {} for policy in policies}
+    grouped_cost: dict[str, dict[float, list[float]]] = {policy: {} for policy in policies}
 
     for row in rows:
         policy = row.get("policy_label")
         if not isinstance(policy, str) or policy not in grouped_deanon:
             continue
 
-        probes_per_day = _coerce_int(row.get("probes_per_day"))
+        probes_per_day = float(_coerce_int(row.get("probes_per_day")))
         deanon = _coerce_float(row.get("attack_taker_deanonymized_fraction"))
         daily_cost_btc = _coerce_float(row.get("attack_daily_cost_btc"))
 
@@ -214,23 +270,18 @@ def build_intensity_series(
 
     output: dict[str, dict[str, list[float]]] = {}
     for policy in policies:
-        x_deanon = sorted(grouped_deanon[policy].keys())
-        x_cost = sorted(grouped_cost[policy].keys())
-        if x_deanon != x_cost:
+        x_d, deanon_mean, deanon_lo, deanon_hi, ns = _stats_pairs(grouped_deanon[policy])
+        x_c, cost_mean, _, _, _ = _stats_pairs(grouped_cost[policy])
+        if x_d != x_c:
             raise ValueError("inconsistent intensity aggregation state")
 
-        y_deanon: list[float] = []
-        y_cost: list[float] = []
-        for probes in x_deanon:
-            deanon_values = grouped_deanon[policy].get(probes, [])
-            cost_values = grouped_cost[policy].get(probes, [])
-            y_deanon.append(sum(deanon_values) / len(deanon_values) if deanon_values else 0.0)
-            y_cost.append(sum(cost_values) / len(cost_values) if cost_values else 0.0)
-
         output[policy] = {
-            "probes_per_day": [float(probes) for probes in x_deanon],
-            "deanon": _round_list(y_deanon),
-            "daily_cost_btc": _round_list(y_cost),
+            "probes_per_day": [float(probes) for probes in x_d],
+            "deanon": _round_list(deanon_mean),
+            "deanon_lo": _round_list(deanon_lo),
+            "deanon_hi": _round_list(deanon_hi),
+            "daily_cost_btc": _round_list(cost_mean),
+            "n_seeds": [float(n) for n in ns],
         }
     return output
 
@@ -333,8 +384,8 @@ def build_key_findings(
         10.0,
     )
     daily_cost_10_probes_btc = _value_at_x(
-        baseline_intensity.get("probes_per_day", []),
-        baseline_intensity.get("daily_cost_btc", []),
+        recommended_intensity.get("probes_per_day", []),
+        recommended_intensity.get("daily_cost_btc", []),
         10.0,
     )
 
@@ -398,10 +449,8 @@ def build_publish_payload(
         mitigation_rows,
         mitigations=(
             "baseline",
-            "max_utxos_3",
-            "max_utxos_1",
-            "sticky",
-            "flagged",
+            "slot_size_3",
+            "slot_size_1",
             "initiation_500",
             "initiation_1000",
             "combined_light",
@@ -409,7 +458,6 @@ def build_publish_payload(
         ),
     )
     longrun_series = build_longrun_series(sustained_rows)
-    longrun_series_fee0 = build_longrun_series(sustained_rows, fee_sats=0)
     intensity_series = build_intensity_series(intensity_rows)
     recovery_series = build_recovery_series(recovery_rows)
     key_findings = build_key_findings(
@@ -435,12 +483,8 @@ def build_publish_payload(
             "series": individual_mitigations,
         },
         "longrun": {
-            "target_fee_sats": 500,
+            "policy_fees": {"baseline": 0, "recommended": 500},
             "series": longrun_series,
-        },
-        "longrun_fee0": {
-            "target_fee_sats": 0,
-            "series": longrun_series_fee0,
         },
         "daily_intensity": {
             "series": intensity_series,

@@ -1,6 +1,6 @@
 """Report generation for CoinJoin privacy simulation.
 
-Runs all scenarios and analyses, produces an interactive HTML report
+Runs all scenarios and analyzes, produces an interactive HTML report
 with Plotly charts, data tables, and written insights.
 """
 
@@ -921,7 +921,7 @@ def generate_report(output_path: Path | None = None) -> Path:
     print("done")
 
     elapsed = time.time() - t0
-    print(f"All analyses complete in {elapsed:.1f}s. Generating charts...")
+    print(f"All analyzes complete in {elapsed:.1f}s. Generating charts...")
 
     # 5. Build charts
     chart_anon = _chart_anonymity_overview(all_results)

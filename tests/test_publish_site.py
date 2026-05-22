@@ -19,7 +19,7 @@ def test_generate_publish_site_writes_html_and_data(tmp_path: Path) -> None:
             "mean_taker_anon_set": 2.0,
         },
         {
-            "label": "mpc8_max_utxos_3_evil0.4",
+            "label": "mpc8_slot_size_3_evil0.4",
             "taker_deanonymized_fraction": 0.0,
             "mean_taker_anon_set": 9.0,
         },
@@ -34,7 +34,7 @@ def test_generate_publish_site_writes_html_and_data(tmp_path: Path) -> None:
             "mean_taker_anon_set": 1.4,
         },
         {
-            "label": "mpc8_max_utxos_3_evil0.6",
+            "label": "mpc8_slot_size_3_evil0.6",
             "taker_deanonymized_fraction": 0.0,
             "mean_taker_anon_set": 8.8,
         },

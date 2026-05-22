@@ -14,7 +14,21 @@ from coinjoin_simulator.network import (
     RealisticNetworkSimulator,
     extract_bonded_maker_profiles,
     fetch_orderbook_snapshot,
+    load_orderbook_snapshot,
 )
+
+
+ORDERBOOK_CACHE_PATH = "data/orderbook_live_snapshot.json"
+
+
+def _load_snapshot() -> dict[str, object]:
+    import os
+
+    if os.path.exists(ORDERBOOK_CACHE_PATH):
+        print(f"Loading cached orderbook from {ORDERBOOK_CACHE_PATH}...")
+        return load_orderbook_snapshot(ORDERBOOK_CACHE_PATH)
+    print("Fetching live orderbook...")
+    return fetch_orderbook_snapshot(DEFAULT_ORDERBOOK_URL)
 
 
 def _initial_network_stats(sim: RealisticNetworkSimulator) -> dict[str, float | int]:
@@ -171,11 +185,6 @@ def _baseline_policy(rounds: int, fee_sats: int, seed: int) -> NetworkSimulation
         n_mixdepths=5,
         pre_probe_all_makers=True,
         wallet_init_mode="seeded_depth0",
-        merge_algorithm="default",
-        disclosed_input_policy="ignore",
-        max_utxos_per_offer=None,
-        sticky_disclosed_utxos=False,
-        flagged_utxo_isolation=False,
         initiation_fee_sats=fee_sats,
         random_seed=seed,
     )
@@ -192,12 +201,13 @@ def _recommended_policy(rounds: int, fee_sats: int, seed: int) -> NetworkSimulat
 
 
 def main() -> None:
-    snapshot = fetch_orderbook_snapshot(DEFAULT_ORDERBOOK_URL)
+    snapshot = _load_snapshot()
     profiles = extract_bonded_maker_profiles(snapshot)
 
     sustained_rounds = 5000
     sustained_evil = [0.1, 0.2, 0.4, 0.6]
     fee_levels = [0, 500]
+    n_seeds_sustained = 5
 
     sustained_rows: list[dict[str, object]] = []
     seed_offset = 0
@@ -207,15 +217,17 @@ def main() -> None:
     ):
         for fee in fee_levels:
             for evil in sustained_evil:
-                cfg = policy_builder(sustained_rounds, fee, 100)
-                cfg = replace(cfg, evil_taker_fraction=evil)
-                row = _run_single(cfg, profiles, seed_offset)
-                row["policy_name"] = policy_name
-                row["scenario"] = "sustained_attack"
-                sustained_rows.append(row)
-                seed_offset += 1
+                for seed_idx in range(n_seeds_sustained):
+                    cfg = policy_builder(sustained_rounds, fee, 100 + seed_idx * 17)
+                    cfg = replace(cfg, evil_taker_fraction=evil)
+                    row = _run_single(cfg, profiles, seed_offset)
+                    row["policy_name"] = policy_name
+                    row["scenario"] = "sustained_attack"
+                    row["seed_index"] = seed_idx
+                    sustained_rows.append(row)
+                    seed_offset += 1
 
-    # Impact threshold: first evil fraction where sustained deanon >= 30%
+    # Impact threshold: first evil fraction where mean sustained deanon >= 30%
     threshold_rows: list[dict[str, object]] = []
     for policy_name in ("baseline", "recommended"):
         for fee in fee_levels:
@@ -224,11 +236,28 @@ def main() -> None:
                 for r in sustained_rows
                 if r["policy_name"] == policy_name and int(r["initiation_fee_sats"]) == fee
             ]
-            subset = sorted(subset, key=lambda x: float(x["evil_taker_fraction"]))
+            # Aggregate seeds per evil fraction (mean deanon)
+            by_evil: dict[float, list[dict[str, object]]] = {}
+            for r in subset:
+                evil = float(r["evil_taker_fraction"])
+                by_evil.setdefault(evil, []).append(r)
+
+            evil_summaries: list[dict[str, object]] = []
+            for evil in sorted(by_evil):
+                rs = by_evil[evil]
+                mean_deanon = sum(float(r["taker_deanonymized_fraction"]) for r in rs) / len(rs)
+                evil_summaries.append(
+                    {
+                        "evil_taker_fraction": evil,
+                        "mean_deanon": mean_deanon,
+                        "rep_row": rs[0],
+                    }
+                )
             crossing = next(
-                (r for r in subset if float(r["taker_deanonymized_fraction"]) >= 0.30),
+                (s for s in evil_summaries if float(s["mean_deanon"]) >= 0.30),
                 None,
             )
+            crossing_row = crossing["rep_row"] if crossing is not None else None
             threshold_rows.append(
                 {
                     "policy_name": policy_name,
@@ -238,12 +267,14 @@ def main() -> None:
                         None if crossing is None else float(crossing["evil_taker_fraction"])
                     ),
                     "crossing_total_probing_cost_sats": (
-                        None if crossing is None else int(crossing["total_probing_cost_sats"])
+                        None
+                        if crossing_row is None
+                        else int(crossing_row["total_probing_cost_sats"])
                     ),
                     "crossing_cost_to_volume_ratio": (
                         None
-                        if crossing is None
-                        else float(crossing["probing_cost_to_volume_ratio"])
+                        if crossing_row is None
+                        else float(crossing_row["probing_cost_to_volume_ratio"])
                     ),
                 }
             )

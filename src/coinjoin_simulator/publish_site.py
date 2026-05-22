@@ -90,9 +90,9 @@ def _baseline_vulnerability_chart(payload: dict[str, object]) -> str:
         )
 
     fig.update_layout(
-        title="Baseline: Taker Deanonymization vs Attacker Share",
+        title="Baseline: All-Maker Input Coverage vs Attacker Share",
         xaxis_title="Fraction of CoinJoin rounds initiated by attacker",
-        yaxis_title="Fraction of takers fully deanonymized",
+        yaxis_title="CJs where all makers are identifiable from inputs",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
         xaxis={"tickformat": ".0%"},
         template="plotly_white",
@@ -108,8 +108,8 @@ def _longrun_degradation_chart(payload: dict[str, object]) -> str:
     mit_series = _as_dict(mitigation.get("series"))
     baseline_1k = _as_dict(mit_series.get("baseline"))
 
-    longrun_fee0 = _as_dict(payload.get("longrun_fee0"))
-    lr_series = _as_dict(longrun_fee0.get("series"))
+    longrun = _as_dict(payload.get("longrun"))
+    lr_series = _as_dict(longrun.get("series"))
     baseline_5k = _as_dict(lr_series.get("baseline"))
 
     fig = go.Figure()
@@ -145,7 +145,7 @@ def _longrun_degradation_chart(payload: dict[str, object]) -> str:
     fig.update_layout(
         title="Baseline Degrades Over Time",
         xaxis_title="Attacker fraction",
-        yaxis_title="Taker deanonymization",
+        yaxis_title="All-maker input coverage",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
         xaxis={"tickformat": ".0%"},
         template="plotly_white",
@@ -163,11 +163,10 @@ def _individual_mitigations_chart(payload: dict[str, object]) -> str:
 
     configs = [
         ("baseline", "Baseline (no mitigations)", "#c7472d", "solid", 3),
-        ("initiation_500", "Initiation fee (500 sats)", "#e8843c", "dash", 2),
-        ("initiation_1000", "Initiation fee (1000 sats)", "#d4a03c", "dash", 2),
-        ("sticky", "Sticky disclosed UTXOs", "#5b8fb9", "solid", 2),
-        ("max_utxos_3", "Max 3 UTXOs per offer", "#1f7a8c", "solid", 2),
-        ("flagged", "Flagged UTXO isolation", "#2d8f6f", "solid", 2),
+        ("slot_size_3", "Sticky offer slot, size=3", "#5b8fb9", "solid", 2),
+        ("slot_size_1", "Sticky offer slot, size=1", "#1f7a8c", "solid", 2),
+        ("combined_light", "Combined (light)", "#2d8f6f", "solid", 2),
+        ("combined_full", "Combined (full)", "#1a5276", "solid", 3),
     ]
 
     fig = go.Figure()
@@ -189,9 +188,12 @@ def _individual_mitigations_chart(payload: dict[str, object]) -> str:
         )
 
     fig.update_layout(
-        title="Individual Countermeasure Effectiveness (8 Makers/CoinJoin, 1000 Rounds)",
+        title=(
+            "Individual Countermeasure Effectiveness (8 Makers/CoinJoin, 1000 Rounds)<br>"
+            "<sub>Initiation-fee impact is covered separately in the cost section</sub>"
+        ),
         xaxis_title="Attacker fraction",
-        yaxis_title="Taker deanonymization",
+        yaxis_title="All-maker input coverage",
         yaxis={"tickformat": ".0%", "range": [0, 0.85]},
         xaxis={"tickformat": ".0%"},
         template="plotly_white",
@@ -208,15 +210,31 @@ def _combined_vs_baseline_chart(payload: dict[str, object]) -> str:
     series = _as_dict(longrun.get("series"))
 
     fig = go.Figure()
-    for key, name, color in (
-        ("baseline", "Baseline", "#c7472d"),
-        ("recommended", "Recommended policy", "#1f9366"),
+    for key, name, color, fill_rgba in (
+        ("baseline", "Baseline (fee=0, no slot)", "#c7472d", "rgba(199,71,45,0.18)"),
+        ("recommended", "Recommended (slot+fee=500)", "#1f9366", "rgba(31,147,102,0.18)"),
     ):
         row = _as_dict(series.get(key))
         evil = _as_float_list(row.get("evil_fractions"))
         deanon = _as_float_list(row.get("deanon"))
+        deanon_lo = _as_float_list(row.get("deanon_lo"))
+        deanon_hi = _as_float_list(row.get("deanon_hi"))
         if not evil or not deanon:
             continue
+        # CI band (drawn first so the line sits on top)
+        if deanon_lo and deanon_hi and len(deanon_lo) == len(evil) == len(deanon_hi):
+            fig.add_trace(
+                go.Scatter(
+                    x=list(evil) + list(reversed(evil)),
+                    y=list(deanon_hi) + list(reversed(deanon_lo)),
+                    fill="toself",
+                    fillcolor=fill_rgba,
+                    line={"color": "rgba(0,0,0,0)"},
+                    hoverinfo="skip",
+                    showlegend=False,
+                    name=f"{name} (95% CI)",
+                )
+            )
         fig.add_trace(
             go.Scatter(
                 x=evil,
@@ -231,7 +249,7 @@ def _combined_vs_baseline_chart(payload: dict[str, object]) -> str:
     fig.update_layout(
         title="Sustained Attack: Baseline vs Recommended (5000 Rounds, Pre-probed)",
         xaxis_title="Attacker fraction",
-        yaxis_title="Taker deanonymization",
+        yaxis_title="All-maker input coverage",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
         xaxis={"tickformat": ".0%"},
         template="plotly_white",
@@ -252,10 +270,39 @@ def _intensity_chart(payload: dict[str, object]) -> str:
 
     probes = _as_float_list(baseline.get("probes_per_day"))
     base_deanon = _as_float_list(baseline.get("deanon"))
+    base_lo = _as_float_list(baseline.get("deanon_lo"))
+    base_hi = _as_float_list(baseline.get("deanon_hi"))
     rec_deanon = _as_float_list(recommended.get("deanon"))
-    cost = _as_float_list(baseline.get("daily_cost_btc"))
+    rec_lo = _as_float_list(recommended.get("deanon_lo"))
+    rec_hi = _as_float_list(recommended.get("deanon_hi"))
+    cost = _as_float_list(recommended.get("daily_cost_btc"))
 
     fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    def _add_band(
+        x: list[float],
+        lo: list[float],
+        hi: list[float],
+        fill_rgba: str,
+        name: str,
+    ) -> None:
+        if not (x and lo and hi and len(x) == len(lo) == len(hi)):
+            return
+        fig.add_trace(
+            go.Scatter(
+                x=list(x) + list(reversed(x)),
+                y=list(hi) + list(reversed(lo)),
+                fill="toself",
+                fillcolor=fill_rgba,
+                line={"color": "rgba(0,0,0,0)"},
+                hoverinfo="skip",
+                showlegend=False,
+                name=name,
+            ),
+            secondary_y=False,
+        )
+
+    _add_band(probes, base_lo, base_hi, "rgba(199,71,45,0.18)", "Baseline 95% CI")
 
     if probes and base_deanon:
         fig.add_trace(
@@ -263,12 +310,14 @@ def _intensity_chart(payload: dict[str, object]) -> str:
                 x=probes,
                 y=base_deanon,
                 mode="lines+markers",
-                name="Baseline deanonymization",
+                name="Baseline: all-maker input coverage",
                 line={"color": "#c7472d", "width": 3},
                 marker={"size": 8},
             ),
             secondary_y=False,
         )
+
+    _add_band(probes, rec_lo, rec_hi, "rgba(31,147,102,0.18)", "Recommended 95% CI")
 
     if probes and rec_deanon:
         fig.add_trace(
@@ -276,7 +325,7 @@ def _intensity_chart(payload: dict[str, object]) -> str:
                 x=probes,
                 y=rec_deanon,
                 mode="lines+markers",
-                name="Recommended deanonymization",
+                name="Recommended: all-maker input coverage",
                 line={"color": "#1f9366", "width": 3},
                 marker={"size": 8},
             ),
@@ -303,7 +352,7 @@ def _intensity_chart(payload: dict[str, object]) -> str:
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
     fig.update_yaxes(
-        title_text="Taker deanonymization",
+        title_text="All-maker input coverage",
         tickformat=".0%",
         range=[0, 1],
         secondary_y=False,
@@ -362,7 +411,7 @@ def _recovery_chart(payload: dict[str, object]) -> str:
     fig.update_layout(
         title="Recovery After a 14-Day Attack (20 Probes/Day)",
         xaxis_title="Day",
-        yaxis_title="Taker deanonymization",
+        yaxis_title="All-maker input coverage",
         yaxis={"tickformat": ".0%", "range": [0, 1]},
         template="plotly_white",
         height=400,
@@ -381,6 +430,7 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     baseline_longrun = _as_float(findings.get("baseline_deanon_evil_04"))
     recommended_longrun = _as_float(findings.get("recommended_deanon_evil_04"))
     baseline_intensity = _as_float(findings.get("baseline_deanon_10_probes"))
+    recommended_intensity = _as_float(findings.get("recommended_deanon_10_probes"))
     cost_ten = _as_float(findings.get("daily_cost_10_probes_btc"))
 
     recovery = _as_dict(payload.get("recovery"))
@@ -651,13 +701,15 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     <section class="hero">
       <h1>CoinJoin Probing Attack</h1>
       <p class="subtitle">
-        A practical analysis of how a malicious actor can deanonymize CoinJoin
-        participants through probing, and the countermeasures that neutralize it.
+        A practical analysis of how a malicious actor builds a live UTXO
+        database of JoinMarket makers by probing, the conditions under which
+        this enables maker identification in honest CoinJoins, and the
+        countermeasures that limit the leakage.
       </p>
       <div class="kpis">
         <div class="kpi danger">
           <strong>{_pct(baseline_longrun)}</strong>
-          <span>Baseline deanon (40% attacker share, 5000 rounds)</span>
+          <span>Baseline: CJs where all makers are identifiable from inputs (40% attacker share, 5000 rounds)</span>
         </div>
         <div class="kpi safe">
           <strong>{_pct(recommended_longrun)}</strong>
@@ -669,7 +721,7 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
         </div>
         <div class="kpi">
           <strong>{_format_btc(cost_ten)}</strong>
-          <span>Attacker cost at 10 probes/day</span>
+          <span>Attacker cost at 10 probes/day (recommended policy)</span>
         </div>
       </div>
       <div class="meta">
@@ -718,8 +770,23 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     </div>
 
     <p>
-      This works well against passive observers. But what about an
-      <strong>active attacker</strong>?
+      That worst-case anonymity holds against a passive on-chain
+      observer. This study isolates a different threat: an
+      <strong>active attacker</strong> who participates in the protocol
+      itself to build a live database of maker UTXOs. By repeatedly
+      probing makers off-chain, the attacker learns which inputs each
+      maker will contribute, enabling them to <em>identify</em> makers
+      in subsequent honest CoinJoins (matching known UTXOs to transaction
+      inputs). Identifying all N makers in a CoinJoin is a necessary
+      condition for the taker's equal-output to become isolable by
+      exclusion &mdash; but it is not sufficient on its own: that final
+      step also requires knowing which equal-output belongs to each
+      identified maker, which demands additional on-chain clustering
+      (covered in the companion
+      <a href="mainnet-deanon.html">JoinMarket equal-output anonymity in
+      practice</a> study). For the on-chain side &mdash; equal-output
+      reuse, change heuristics, and clustering across many
+      transactions &mdash; see that companion study.
     </p>
 
     <!-- 2. HOW PROBING WORKS -->
@@ -754,17 +821,52 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
       <li>
         <strong>Cascade:</strong> When a maker is identified, the attacker
         also learns their <em>co-spent inputs</em> (other UTXOs the maker
-        contributed) and their <em>change output</em>. These new UTXOs are
-        added to the database, enabling identification in future
-        CoinJoins. The attacker's knowledge <strong>snowballs</strong>.
+        contributed) and their <em>change output</em> (distinguishable by
+        value from the equal-amount outputs). These new UTXOs are added to
+        the database, enabling identification in future CoinJoins. The
+        attacker's knowledge <strong>snowballs</strong>.
       </li>
       <li>
-        <strong>Deanonymize:</strong> If the attacker can identify all
-        N makers in a CoinJoin, the remaining unidentified output must
-        belong to the taker. The anonymity set collapses from N+1 to 1.
-        The taker is <strong>fully deanonymized</strong>.
+        <strong>Deanonymize:</strong> Probing alone reveals maker inputs
+        and change outputs, but does <em>not</em> directly identify which
+        equal-amount output belongs to each maker &mdash; all equal outputs
+        are the same size. To isolate the taker's equal-output, the
+        attacker must additionally map each identified maker to their
+        equal-output, for example by tracking the maker's wallet across
+        multiple CoinJoins or by applying on-chain clustering (see the
+        companion <a href="mainnet-deanon.html">mainnet-deanon study</a>).
+        Once all <em>N</em> maker equal-outputs are accounted for, the
+        remaining one is the taker's: the anonymity set collapses from
+        <em>N + 1</em> to 1.
       </li>
     </ol>
+
+    <div class="callout">
+      <p>
+        <strong>Scope of this study.</strong> The simulator models only
+        the probe-to-cascade leak: how rapidly the attacker's known-UTXO
+        database grows as a function of probe rate, attacker share, and
+        countermeasures. It does <em>not</em> model on-chain heuristics
+        (change attribution, equal-output reuse, address reuse, timing).
+        Those compound the leak in practice; the
+        <a href="mainnet-deanon.html">mainnet-deanon study</a>
+        quantifies them on a real corpus. Read the two studies as
+        complementary lower bounds on a real attacker's capability.
+      </p>
+      <p>
+        The anonymity-set metric used here (<em>N + 1 &minus; identified
+        makers</em>) is a <strong>worst-case estimate</strong>. It assumes
+        that for every identified maker the attacker can also determine
+        which equal-amount output is theirs &mdash; an additional step
+        that in practice requires on-chain wallet clustering on top of the
+        probe database. The metric reported in this study (referred to as
+        "all-maker input coverage") is therefore strictly the fraction of
+        CoinJoins in which the attacker successfully matches every
+        maker's known UTXOs to their inputs. Full taker deanonymization
+        additionally requires the on-chain clustering step described in
+        the companion <a href="mainnet-deanon.html">mainnet-deanon study</a>.
+      </p>
+    </div>
 
     <h3>Existing protections and their limits</h3>
     <p>
@@ -798,23 +900,32 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
       JoinMarket orderbook.
     </p>
 
-    <div class="card">
+      <div class="card">
       <p>
-        Even at moderate attacker shares, a significant fraction of honest
-        takers are fully deanonymized. At 20% attacker share (1 in 5
-        CoinJoin rounds is a probe), roughly <strong>20% of takers lose
-        all privacy</strong>. At 40%, it reaches 32%.
+        Even at moderate attacker shares, in a meaningful fraction of honest
+        CoinJoins the attacker can identify every maker from their inputs
+        within 1,000 rounds. At 20% attacker share (1 in 5 rounds is a
+        probe), roughly <strong>32% of CoinJoins have all makers
+        identifiable</strong>; at 40% it is about <strong>48%</strong>, and
+        at 80% it climbs to <strong>83%</strong>. (This is the necessary
+        precondition for taker deanonymization; the sufficient condition
+        also requires on-chain clustering.)
       </p>
       <div class="chart">{baseline_chart}</div>
     </div>
 
     <div class="card">
       <p>
-        It gets worse over time. Because each identification reveals more
-        UTXOs (the cascade effect), the attacker's database grows with
-        every honest CoinJoin. Over 5,000 rounds, even a 10% attacker
-        share produces <strong>45% deanonymization</strong>, up from 4%
-        in 1,000 rounds. This is the long-term steady-state risk.
+        The picture worsens with sustained probing. Because each
+        identification reveals more UTXOs (the cascade effect), the
+        attacker's database grows with every honest CoinJoin it
+        observes. Over 5,000 rounds of mixed probe + honest traffic,
+        the unmitigated baseline reaches roughly <strong>40%
+         all-maker input coverage at 10% attacker share</strong>, <strong>57% at
+        20%</strong>, and <strong>64% at 40%</strong>. This is the
+        long-term steady-state risk an unmitigated network converges
+        to. Variance across seeds is shown as a 95% CI band on the
+        sustained-attack chart in section 5.
       </p>
       <div class="chart">{degradation_chart}</div>
     </div>
@@ -823,95 +934,52 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     <h2>4. Countermeasures</h2>
 
     <p>
-      We evaluate six countermeasures. Each addresses a different aspect
-      of the probing attack: limiting information leakage, breaking the
-      identification chain, or raising the attacker's cost.
+      We evaluate two classes of countermeasure. The first targets the
+      structural information leak (what each probe reveals); the second
+      raises the attacker's economic cost. Neither eliminates the UTXO
+      leakage on its own; together they shrink the attack window enough that
+      sustained probing stops being economically rational.
     </p>
 
-    <h3>4.1 Max UTXOs per offer</h3>
+    <h3>4.1 Timed sticky offer slot (<code>offer_slot_size</code>)</h3>
     <p>
-      <strong>What it does:</strong> Caps how many UTXOs a maker reveals
-      when responding to a CoinJoin request. Instead of revealing all
-      UTXOs in their largest mixdepth (which could be 5-10 or more), the
-      maker only discloses the top <em>N</em> by value.
+      <strong>What it does:</strong> Each maker pre-selects a random
+      subset of <em>N</em> UTXOs from its active mixdepth &mdash; the
+      <em>offer slot</em> &mdash; and advertises only those. The advertised
+      <code>maxsize</code> equals the slot's total. The slot is sticky:
+      it stays fixed for a randomized lifetime drawn uniformly from
+      <code>[slot_ttl_min_rounds, slot_ttl_max_rounds]</code>
+      (default 4-20 rounds, roughly 1-5 hours at typical traffic).
+      Probes do <em>not</em> rotate the slot; only TTL expiry or a
+      successful CoinJoin (which spends a slot UTXO) rebuilds it.
     </p>
     <p>
-      <strong>Why it helps:</strong> The attacker learns fewer UTXOs per
-      probe. With a cap of 3, most of the maker's UTXOs remain unknown,
-      making identification in future CoinJoins much less likely.
-    </p>
-
-    <h3>4.2 Flagged UTXO isolation</h3>
-    <p>
-      <strong>What it does:</strong> UTXOs that were disclosed during a
-      failed CoinJoin negotiation (i.e., a probe) are marked as
-      <em>flagged</em>. When a flagged UTXO appears as input in a later
-      CoinJoin, it does <strong>not</strong> count as identification of
-      the maker. The flag also propagates to change outputs derived from
-      flagged UTXOs.
-    </p>
-    <p>
-      <strong>Why it helps:</strong> It breaks the identification chain at
-      its root. Even if the attacker knows a UTXO belongs to a maker,
-      that knowledge came from a probe, so it is tainted and cannot be
-      used for identification. Only UTXOs learned through legitimate
-      channels (e.g., the maker being identified via other means) count.
+      <strong>Why it helps:</strong> Re-probing the same maker within
+      its TTL reveals nothing new &mdash; the attacker pays the initiation
+      fee again and learns the same <em>N</em> UTXOs. Across many makers
+      the union of disclosed UTXOs grows much more slowly. With
+      <em>N</em>=3, each maker exposes at most 3 UTXOs per TTL window
+      regardless of how often it is probed, so the attacker's ability to
+      pre-build a complete known-UTXO database is sharply
+      throttled. Random TTLs prevent the attacker from synchronizing
+      probes with rotation events.
     </p>
 
-    <h3>4.3 Sticky disclosed UTXOs</h3>
+    <h3>4.2 Initiation fee (<code>initiation_fee_sats</code>)</h3>
     <p>
-      <strong>What it does:</strong> After a probe (failed CoinJoin), the
-      maker remembers which UTXOs were disclosed. On subsequent probes,
-      the maker re-offers <em>the same UTXOs</em> instead of revealing
-      new ones. The sticky set clears when the UTXOs are actually spent
-      in a completed CoinJoin.
-    </p>
-    <p>
-      <strong>Why it helps:</strong> Repeated probing of the same maker
-      yields no new information. The attacker cannot learn more by probing
-      the same maker multiple times.
-    </p>
-
-    <h3>4.4 Initiation fee</h3>
-    <p>
-      <strong>What it does:</strong> Each maker charges a fee (in sats)
-      just to start the CoinJoin negotiation, paid regardless of whether
-      the transaction completes. Both honest and malicious takers pay.
+      <strong>What it does:</strong> Each maker charges a small fee (in
+      sats) just to start the CoinJoin negotiation, paid regardless of
+      whether the transaction completes. Both honest and malicious takers
+      pay it.
     </p>
     <p>
       <strong>Why it helps:</strong> It makes probing expensive. At 500
       sats per maker with 100 makers, each full probe round costs 50,000
-      sats. At 10 rounds per day, the attacker spends 0.005 BTC/day.
-      However, this is purely an economic deterrent; it does
-      <strong>not reduce information leakage</strong>.
-    </p>
-
-    <h3>4.5 Merge algorithm (gradual)</h3>
-    <p>
-      <strong>What it does:</strong> Controls how makers select inputs when
-      participating in a CoinJoin. The <em>gradual</em> algorithm selects
-      the minimum UTXOs needed to cover the amount, then adds one small
-      UTXO for slow consolidation. The default algorithm uses greedy
-      largest-first with no extras.
-    </p>
-    <p>
-      <strong>Why it helps:</strong> Fewer inputs per CoinJoin means less
-      information revealed to any observer (including the attacker) if a
-      maker is identified through other means.
-    </p>
-
-    <h3>4.6 Disclosed input policy (adaptive)</h3>
-    <p>
-      <strong>What it does:</strong> Makers track which of their UTXOs
-      the attacker has seen (disclosed UTXOs). The <em>adaptive</em>
-      policy dynamically decides whether to preferentially spend
-      disclosed or clean UTXOs based on the current backlog ratio.
-      When many UTXOs are disclosed, the maker more aggressively cycles
-      them through CoinJoins to generate fresh outputs.
-    </p>
-    <p>
-      <strong>Why it helps:</strong> It accelerates the turnover of
-      compromised UTXOs while preserving clean ones for normal use.
+      sats; at 10 rounds per day the attacker spends roughly 0.005 BTC/day.
+      It is purely economic: on its own it does <strong>not reduce
+      information leakage</strong>, but it forces the attacker into a
+      cost-vs-coverage trade-off and, combined with the sticky slot,
+      makes the per-bit-of-information cost rise sharply.
     </p>
 
     <h3>Individual effectiveness</h3>
@@ -927,44 +995,46 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
       <table class="effect-table">
         <tr>
           <th>Countermeasure</th>
-          <th>Effect on deanonymization</th>
+          <th>Effect on all-maker input coverage (40% evil share)</th>
           <th>Mechanism</th>
         </tr>
         <tr>
-          <td>Max 3 UTXOs per offer</td>
-          <td class="effective">Eliminates deanonymization</td>
-          <td>Limits information per probe</td>
+          <td>Sticky offer slot, size=1</td>
+          <td class="effective">large reduction</td>
+          <td>Each maker exposes 1 UTXO per TTL window</td>
         </tr>
         <tr>
-          <td>Flagged UTXO isolation</td>
-          <td class="effective">Eliminates deanonymization</td>
-          <td>Blocks probe-derived identification</td>
-        </tr>
-        <tr>
-          <td>Sticky disclosed UTXOs</td>
-          <td class="effective">Near-zero (&lt;0.5% at 80% evil)</td>
-          <td>Prevents repeat probing gains</td>
+          <td>Sticky offer slot, size=3</td>
+          <td class="effective">large reduction</td>
+          <td>Each maker exposes up to 3 UTXOs per TTL window</td>
         </tr>
         <tr>
           <td>Initiation fee (500 sats)</td>
-          <td class="ineffective">Does not reduce deanonymization</td>
-          <td>Economic cost only</td>
+          <td class="ineffective">modest reduction (cost lever only)</td>
+          <td>Raises probing cost but does not reduce per-probe leakage</td>
         </tr>
         <tr>
           <td>Initiation fee (1000 sats)</td>
-          <td class="ineffective">Does not reduce deanonymization</td>
-          <td>Economic cost only</td>
+          <td class="ineffective">modest reduction (cost lever only)</td>
+          <td>Raises probing cost but does not reduce per-probe leakage</td>
+        </tr>
+        <tr>
+          <td>Combined (slot=3 + 500 sat fee)</td>
+          <td class="effective">large reduction</td>
+          <td>Defense in depth: structural cap + economic friction</td>
         </tr>
       </table>
     </div>
 
     <div class="callout">
       <p>
-        Three countermeasures individually eliminate or nearly eliminate
-        deanonymization: <strong>max UTXOs per offer</strong>,
-        <strong>flagged UTXO isolation</strong>, and
-        <strong>sticky disclosed UTXOs</strong>. The initiation fee is
-        important as an economic deterrent but insufficient alone.
+        The structural lever &mdash; the timed sticky offer slot &mdash; is what
+        drives the all-maker input coverage metric down. Initiation fees alone
+        barely move the needle, but they raise the per-bit-of-information cost when
+        layered on top of a sticky slot. Long-running attacks (Section 5)
+        show that combining the structural and economic defenses matters,
+        because at very high probe intensity each one alone degrades over
+        time.
       </p>
     </div>
 
@@ -984,34 +1054,24 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
           <th>Purpose</th>
         </tr>
         <tr>
-          <td><code>max_utxos_per_offer</code></td>
+          <td><code>offer_slot_size</code></td>
           <td><code>3</code></td>
-          <td>Limit information per probe</td>
+          <td>Cap UTXOs per offer slot</td>
         </tr>
         <tr>
-          <td><code>sticky_disclosed_utxos</code></td>
-          <td><code>true</code></td>
-          <td>Block repeat probing gains</td>
+          <td><code>slot_ttl_min_rounds</code></td>
+          <td><code>4</code></td>
+          <td>Minimum slot lifetime (sticky)</td>
         </tr>
         <tr>
-          <td><code>flagged_utxo_isolation</code></td>
-          <td><code>true</code></td>
-          <td>Break identification chain from probes</td>
+          <td><code>slot_ttl_max_rounds</code></td>
+          <td><code>20</code></td>
+          <td>Maximum slot lifetime (random rotation)</td>
         </tr>
         <tr>
           <td><code>initiation_fee_sats</code></td>
           <td><code>500</code></td>
           <td>Economic deterrent</td>
-        </tr>
-        <tr>
-          <td><code>merge_algorithm</code></td>
-          <td><code>gradual</code></td>
-          <td>Minimize input exposure per CoinJoin</td>
-        </tr>
-        <tr>
-          <td><code>disclosed_input_policy</code></td>
-          <td><code>adaptive</code></td>
-          <td>Cycle compromised UTXOs efficiently</td>
         </tr>
         <tr>
           <td><code>n_makers_per_coinjoin</code></td>
@@ -1028,19 +1088,25 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
 
     <h3>Sustained attack resistance</h3>
     <p>
-      We test the recommended policy under the harshest conditions: 5,000
-      rounds with a pre-probed attacker (every maker is probed before the
-      first honest CoinJoin, simulating the simultaneous snapshot attack).
-      The result is <strong>zero deanonymization</strong> across all
-      attacker shares, from 10% to 60%.
+      We test the recommended policy under harsh conditions: 5,000 rounds
+      with a pre-probed attacker that snapshots every maker's offer slot
+      before the first honest CoinJoin. At low to moderate attacker
+      shares the recommended policy <strong>roughly halves the
+      all-maker input coverage rate</strong> versus the unmitigated baseline; at high
+      shares the absolute reduction stays meaningful but shrinks in
+      relative terms.
     </p>
 
     <div class="card">
       <div class="chart">{combined_chart}</div>
       <p>
-        The baseline reaches {_pct(baseline_longrun)} deanonymization
-        at 40% attacker share. The recommended policy stays at
-        {_pct(recommended_longrun)}.
+        At 10% attacker share, baseline ~40% vs recommended ~19%
+        all-maker input coverage; at 20% share, ~57% vs ~22%; at 40% share,
+        baseline {_pct(baseline_longrun)} vs recommended
+        {_pct(recommended_longrun)}; at 60% share, ~85% vs ~60%.
+        Beyond about 100 probes/day or attacker shares above ~60%, the
+        gap narrows further (see Section 6) &mdash; defence-in-depth slows
+        UTXO leakage rather than abolishing it.
       </p>
     </div>
 
@@ -1048,31 +1114,39 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     <h2>6. Attack Economics</h2>
 
     <p>
-      Even if an attacker is willing to spend Bitcoin on probing,
-      the combination of initiation fees and information-limiting
-      countermeasures makes the attack fruitless. The chart below
-      shows how probe intensity affects both deanonymization and
-      attacker cost over a 14-day attack window:
+      Mitigations don't make the attack impossible — they make it more
+      expensive per unit of information extracted. The chart below
+      tracks final-day all-maker input coverage and attacker cost across probe
+      intensities for a 14-day attack window:
     </p>
 
     <div class="card">
       <div class="chart">{intensity_chart}</div>
       <p>
-        Against the baseline, even a single probe round per day achieves
-        70% deanonymization. Increasing to 50 probes/day pushes it to 97%,
-        at a cost of 0.025 BTC/day. Against the recommended policy, the
-        attacker achieves <strong>zero deanonymization regardless of
-        spend</strong>.
+        The picture is sobering. Against the baseline, a single probe
+        round per day already drives final-day all-maker input coverage to
+        roughly <strong>{_pct(baseline_intensity)}</strong>, and 50
+        probes/day reaches <strong>~96%</strong>. Against the recommended
+        policy, the same intensities yield <strong>~53%</strong> and
+        <strong>~87%</strong> respectively &mdash; a real reduction, but far
+        from a fix. The attacker pays linearly with intensity (about
+        500 sats per probe round at the recommended fee, so 50
+        probes/day costs ~0.025 BTC/day), and the marginal information
+        per probe drops once the slot has been seen, but a patient
+        attacker still maps most of the network's UTXOs over a fortnight.
       </p>
     </div>
 
     <div class="callout callout-warn">
       <p>
         <strong>Initiation fees alone are not enough.</strong> Even at
-        1,000 sats per maker, an attacker can still deanonymize ~56% of
-        takers at 80% evil share. Fees raise the cost but do not address
-        the fundamental information leakage. The real defense comes from
-        limiting what the attacker learns.
+        1,000 sats per maker, an attacker still achieves all-maker input
+        coverage for well over half of CoinJoins at moderate evil shares
+        in our 1,000-round runs.
+        Fees raise the per-probe cost but do not change what the
+        attacker learns. The real defence comes from the timed sticky
+        slot, which caps information-per-probe and forces the attacker
+        to pay again to learn anything new.
       </p>
     </div>
 
@@ -1088,10 +1162,14 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
     <div class="card">
       <div class="chart">{recovery_chart}</div>
       <p>
-        After a 14-day attack with 20 probes/day, the baseline takes
+        After a 14-day attack at 20 probes/day, the baseline takes
         until approximately day {recovery_day_text} to recover below 5%
-        deanonymization. The recommended policy was never affected:
-        deanonymization stayed at 0% throughout the attack.
+        all-maker input coverage, and the recommended policy recovers only
+        marginally faster (around 19 days versus 21 in our runs). The
+        recommended policy's main benefit is starting recovery from a
+        lower peak, not accelerating the recovery itself: rotation of
+        the offer slot is what eventually flushes the attacker's
+        database, and that proceeds at the same rate either way.
       </p>
     </div>
 
@@ -1102,41 +1180,58 @@ def _render_html(payload: dict[str, object], data_href: str) -> str:
       <ol style="margin: 0; padding-left: 20px; color: var(--ink-soft);">
         <li style="margin-bottom: 8px;">
           <strong>CoinJoin probing is a real privacy threat.</strong>
-          Without countermeasures, a moderately resourced attacker can
-          deanonymize the majority of honest takers through the
-          information cascade from probing.
+          Without countermeasures, a moderately resourced attacker
+          can identify all makers in a substantial fraction of honest CoinJoins
+          through the information cascade triggered by probing. This is
+          a necessary precondition for full taker deanonymization (which
+          additionally requires on-chain clustering &mdash; see the companion
+          <a href="mainnet-deanon.html">mainnet-deanon study</a>). In our
+          5,000-round sustained-attack runs, the baseline all-maker input
+          coverage climbs to roughly 40% at 10% attacker share and 64% at
+          40% attacker share, with an 85%+ tail at 60% attacker share.
         </li>
         <li style="margin-bottom: 8px;">
-          <strong>Three countermeasures are individually effective:</strong>
-          capping UTXOs per offer, isolating flagged UTXOs, and sticky
-          disclosure each eliminate deanonymization on their own. They
-          work by limiting or poisoning the information the attacker
-          collects.
+          <strong>The timed sticky offer slot is the structural lever:</strong>
+          capping the offer to <em>N</em> UTXOs and holding it fixed for a
+          random TTL (<code>offer_slot_size</code> +
+          <code>slot_ttl_*</code>) directly limits how much an attacker can
+          learn per maker per time window. Re-probing within the TTL
+          yields no new information, breaking the "probe everything every
+          day" strategy without requiring per-attempt economic friction.
         </li>
         <li style="margin-bottom: 8px;">
           <strong>Initiation fees are necessary but not sufficient.</strong>
           They raise the attacker's cost but do not stop the information
-          leakage that enables deanonymization. Fees complement
+          leakage. Fees only make sense as a complement to
           information-limiting measures.
         </li>
         <li style="margin-bottom: 8px;">
-          <strong>The recommended policy combines all layers.</strong>
-          It achieves zero deanonymization even under sustained,
-          pre-probed, high-intensity attacks. The defense is robust
-          across all tested scenarios.
+          <strong>The recommended policy combines two layers.</strong>
+          The timed sticky slot caps information leakage per probe (structural
+          defence); the initiation fee raises the attacker's per-probe cost
+          (economic friction). Under sustained, pre-probed, multi-thousand-round
+          attacks this combination roughly halves the all-maker input
+          coverage rate compared to the baseline. That is a meaningful
+          improvement, but a determined long-running attacker can still
+          map a notable fraction of the network's UTXOs &mdash; defence
+          in depth is necessary, not optional.
         </li>
         <li>
-          <strong>Recovery is slow without mitigations.</strong>
-          After a 2-week attack ends, the baseline needs ~12 more days
-          to recover. With the recommended policy, there is nothing
-          to recover from.
+          <strong>Recovery is slow either way.</strong>
+          After a 2-week attack ends, both baseline and recommended
+          policies need roughly 19-21 days to recover below 5%
+          all-maker input coverage in our runs. The recommended policy's win is
+          starting recovery from a lower peak, not converging faster:
+          recovery rate is set by how quickly makers naturally rotate
+          their slot UTXOs, which is independent of the policy in
+          place.
         </li>
       </ol>
     </div>
 
     <p class="footer">
       Simulation source and raw data:
-      <a href="https://github.com/m0wer/coinjoin-simulator">github.com/m0wer/coinjoin-simulator</a>
+      <a href="https://github.com/joinmarket-ng/coinjoin-simulator">github.com/joinmarket-ng/coinjoin-simulator</a>
       | Curated dataset: <a href="{data_href}">{data_href}</a>
       | Generated {generated_at}
     </p>

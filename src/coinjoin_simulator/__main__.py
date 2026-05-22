@@ -506,22 +506,22 @@ def main() -> None:
         help="Number of mixdepths per wallet (default: 5)",
     )
     network_parser.add_argument(
-        "--max-utxos-per-offer",
+        "--offer-slot-size",
         type=int,
         default=None,
-        help="Cap UTXOs revealed per probe (mitigation, default: unlimited)",
+        help="Sticky offer slot size: cap UTXOs in maker's advertised offer (default: unlimited)",
     )
     network_parser.add_argument(
-        "--sticky-disclosed",
-        action="store_true",
-        default=False,
-        help="Enable sticky disclosed UTXOs mitigation",
+        "--slot-ttl-min-rounds",
+        type=int,
+        default=4,
+        help="Minimum TTL of the sticky offer slot, in rounds (default: 4)",
     )
     network_parser.add_argument(
-        "--flagged-isolation",
-        action="store_true",
-        default=False,
-        help="Enable flagged UTXO isolation mitigation",
+        "--slot-ttl-max-rounds",
+        type=int,
+        default=20,
+        help="Maximum TTL of the sticky offer slot, in rounds (default: 20)",
     )
     network_parser.add_argument(
         "--initiation-fee",
@@ -557,7 +557,7 @@ def main() -> None:
         for name, config in ALL_SCENARIOS.items():
             all_results[name] = run_scenario(name, config)
 
-        # Also run sybil and surveillance analyses
+        # Also run sybil and surveillance analyzes
         all_results["sybil_resistance"] = run_sybil_analysis()
         all_results["surveillance"] = run_surveillance_analysis()
 
@@ -607,9 +607,9 @@ def main() -> None:
             total_balance_ratio_cap=args.ratio_cap,
             random_seed=args.seed,
             n_mixdepths=args.n_mixdepths,
-            max_utxos_per_offer=args.max_utxos_per_offer,
-            sticky_disclosed_utxos=args.sticky_disclosed,
-            flagged_utxo_isolation=args.flagged_isolation,
+            offer_slot_size=args.offer_slot_size,
+            slot_ttl_min_rounds=args.slot_ttl_min_rounds,
+            slot_ttl_max_rounds=args.slot_ttl_max_rounds,
             initiation_fee_sats=args.initiation_fee,
         )
 
