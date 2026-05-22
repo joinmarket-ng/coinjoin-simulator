@@ -117,14 +117,20 @@ class _ConstrainedUnionFind:
             ra, rb = rb, ra
         self.parent[rb] = ra
         self.size[ra] += self.size[rb]
+        # Symmetric repoint: every root that forbids ``rb`` must now
+        # forbid ``ra`` instead. We only need to touch the small set
+        # ``forbidden[rb]`` rather than scan every root, which keeps
+        # the merge cost proportional to the constraint degree.
+        for other in self.forbidden[rb]:
+            if other == ra:
+                continue
+            s = self.forbidden.get(other)
+            if s is not None:
+                s.discard(rb)
+                s.add(ra)
         self.forbidden[ra] |= self.forbidden[rb]
-        # Repoint the forbidden references of every other root that
-        # pointed at ``rb`` to point at ``ra`` instead. This keeps the
-        # forbidden graph consistent under path compression.
-        for _other_root, forbid_set in self.forbidden.items():
-            if rb in forbid_set:
-                forbid_set.discard(rb)
-                forbid_set.add(ra)
+        self.forbidden[ra].discard(ra)
+        self.forbidden[ra].discard(rb)
         del self.size[rb]
         del self.forbidden[rb]
         return True
@@ -149,12 +155,17 @@ class MakerSlot:
     and change). The slot identity is ``(txid, owner_id)``; in real
     on-chain analysis the ``owner_id`` is unknown ahead of time and is
     a placeholder index 0..n_makers_in_this_tx-1.
+
+    ``equal_output`` may be ``None`` for mainnet slots where the ILP
+    solver cannot identify which equal-amount vout belongs to which
+    maker (equal outputs are interchangeable in the constraint
+    system). In that case we only use the change-chain edge.
     """
 
     txid: str
     owner_id: str
     inputs: tuple[str, ...]
-    equal_output: str
+    equal_output: str | None
     change_output: str | None
 
 
@@ -227,7 +238,8 @@ def _build_index(slots: Sequence[MakerSlot]) -> _Index:
         idx.slot_id_of[(s.txid, s.owner_id)] = i
         idx.slot_by_id.append(s)
         idx.slots_in_tx[s.txid].append(i)
-        idx.producer_of_utxo[s.equal_output] = i
+        if s.equal_output is not None:
+            idx.producer_of_utxo[s.equal_output] = i
         if s.change_output is not None:
             idx.producer_of_utxo[s.change_output] = i
         for utxo_id in s.inputs:
@@ -280,7 +292,6 @@ def cluster_state_machine(slots: Sequence[MakerSlot]) -> dict[int, int]:
                 if consumer_id == producer_id:
                     continue
                 uf.union(producer_id, consumer_id)
-
     # Dense cluster ids.
     comps = uf.components()
     roots = sorted(comps.keys())
@@ -306,8 +317,9 @@ def state_machine_cluster(res: SimResult) -> ClusterAssignment:
     ground_truth: dict[str, str] = {}
     for i, s in enumerate(slots):
         cid = slot_to_cluster[i]
-        labels[s.equal_output] = cid
-        ground_truth[s.equal_output] = s.owner_id
+        if s.equal_output is not None:
+            labels[s.equal_output] = cid
+            ground_truth[s.equal_output] = s.owner_id
         if s.change_output is not None:
             labels[s.change_output] = cid
             ground_truth[s.change_output] = s.owner_id
