@@ -1,0 +1,2014 @@
+{
+  "counterparties": [
+    {
+      "bond_amount_sats": 440845980,
+      "bond_locktime": 1853971200,
+      "counterparty": "J57UryXz9V9cWrRv",
+      "fidelity_bond_value": 8007055590.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 100669062,
+          "minsize_sats": 428156,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 199999181,
+      "bond_locktime": 1798761600,
+      "counterparty": "J59W2HDamdpwWi6P",
+      "fidelity_bond_value": 354246995.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 782979538,
+          "minsize_sats": 72305,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 42555102,
+      "bond_locktime": 1798761600,
+      "counterparty": "J56sKAoTbtxdqAdX",
+      "fidelity_bond_value": 26765768.0,
+      "offers": [
+        {
+          "cjfee": 1.9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 227731078,
+          "minsize_sats": 97335,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 271297,
+      "bond_locktime": 1796083200,
+      "counterparty": "J59N3wDykvFkZvTi",
+      "fidelity_bond_value": 22540.0,
+      "offers": [
+        {
+          "cjfee": 51.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 883820,
+          "minsize_sats": 53668,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 204048986,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5CpUFWmBZdmc9r4",
+      "fidelity_bond_value": 308185473.0,
+      "offers": [
+        {
+          "cjfee": 3.1e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 798158193,
+          "minsize_sats": 100002,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 409837043,
+      "bond_locktime": 1798761600,
+      "counterparty": "J57eoWyCXeKSog5F",
+      "fidelity_bond_value": 2147295058.0,
+      "offers": [
+        {
+          "cjfee": 9.9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 289544523,
+          "minsize_sats": 1008354,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 946399,
+      "bond_locktime": 1796083200,
+      "counterparty": "J52S43TiwYedeKsm",
+      "fidelity_bond_value": 372586.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 23870652,
+          "minsize_sats": 99922,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 36572,
+      "bond_locktime": 1796083200,
+      "counterparty": "J561ChxbgXpaGdmm",
+      "fidelity_bond_value": 8695.0,
+      "offers": [
+        {
+          "cjfee": 250.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 550547,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2597611,
+      "bond_locktime": 1830297600,
+      "counterparty": "J5C85Kf9TMPxiiDe",
+      "fidelity_bond_value": 1797751.0,
+      "offers": [
+        {
+          "cjfee": 5.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 2973350,
+          "minsize_sats": 96623,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 17182857,
+      "bond_locktime": 2058998400,
+      "counterparty": "J53Rhmi2TFnuGrwV",
+      "fidelity_bond_value": 205632548.0,
+      "offers": [
+        {
+          "cjfee": 0.00069,
+          "fee_type": "relative",
+          "maxsize_sats": 173378981,
+          "minsize_sats": 27301,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 20575056,
+      "bond_locktime": 1822348800,
+      "counterparty": "J52Rm2p1Pqhidkmu",
+      "fidelity_bond_value": 34092384.0,
+      "offers": [
+        {
+          "cjfee": 9.9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 202740139,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 199997814,
+      "bond_locktime": 1798761600,
+      "counterparty": "J58MLuVSEYywuMFf",
+      "fidelity_bond_value": 700029276.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 699926412,
+          "minsize_sats": 68781,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1453310,
+      "bond_locktime": 1785542400,
+      "counterparty": "J52xoc38vMAB5TwK",
+      "fidelity_bond_value": 102032.0,
+      "offers": [
+        {
+          "cjfee": 21.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 2077295,
+          "minsize_sats": 1000000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1999864,
+      "bond_locktime": 1790812800,
+      "counterparty": "J53BK9mDSGYi1hZj",
+      "fidelity_bond_value": 178001.0,
+      "offers": [
+        {
+          "cjfee": 9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 5352700,
+          "minsize_sats": 89000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 13869039,
+      "bond_locktime": 1827619200,
+      "counterparty": "J55DNXw6itkxJGvs",
+      "fidelity_bond_value": 57600791.0,
+      "offers": [
+        {
+          "cjfee": 0.0001,
+          "fee_type": "relative",
+          "maxsize_sats": 56520033,
+          "minsize_sats": 1000000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 10357348,
+      "bond_locktime": 1785542400,
+      "counterparty": "J55JLKi7LVaCs3KU",
+      "fidelity_bond_value": 1325809.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 5825038,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 429289640,
+      "bond_locktime": 1798761600,
+      "counterparty": "J58uJvKuvbcPu26t",
+      "fidelity_bond_value": 1024084441.0,
+      "offers": [
+        {
+          "cjfee": 3.7e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 797209314,
+          "minsize_sats": 10000000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1899758,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5DA6ahhe4HrosCo",
+      "fidelity_bond_value": 136391.0,
+      "offers": [
+        {
+          "cjfee": 1e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 243917715,
+          "minsize_sats": 10004178,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 155933,
+      "bond_locktime": 1827619200,
+      "counterparty": "J52Jh5XhDyfuHxnU",
+      "fidelity_bond_value": 102206.0,
+      "offers": [
+        {
+          "cjfee": 9e-06,
+          "fee_type": "relative",
+          "maxsize_sats": 1309052,
+          "minsize_sats": 50000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1036591,
+      "bond_locktime": 1788220800,
+      "counterparty": "J5EntULaZVdGzqcw",
+      "fidelity_bond_value": 66140.0,
+      "offers": [
+        {
+          "cjfee": 5500.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 16214931,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 4061710,
+      "bond_locktime": 1780272000,
+      "counterparty": "J52cAz1NBT1DZj5h",
+      "fidelity_bond_value": 508868.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 10405027,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1500000000,
+      "bond_locktime": 1898553600,
+      "counterparty": "J52PbXHm7nczZSPe",
+      "fidelity_bond_value": 28520283935.0,
+      "offers": [
+        {
+          "cjfee": 2.10976e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 931371803,
+          "minsize_sats": 90621,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 994000,
+      "bond_locktime": 1838160000,
+      "counterparty": "J55uDKPG93ybb1q5",
+      "fidelity_bond_value": 651841.0,
+      "offers": [
+        {
+          "cjfee": 492.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 8407728,
+          "minsize_sats": 96681,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 20990754,
+      "bond_locktime": 1780272000,
+      "counterparty": "J56Gq2vaFXbByS4E",
+      "fidelity_bond_value": 4140285.0,
+      "offers": [
+        {
+          "cjfee": 1.5e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 67111698,
+          "minsize_sats": 3260206,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1512004,
+      "bond_locktime": 1780272000,
+      "counterparty": "J53YCfvtjMaf2fHW",
+      "fidelity_bond_value": 94239.0,
+      "offers": [
+        {
+          "cjfee": 1430.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 1359231,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 267220751,
+      "bond_locktime": 1796083200,
+      "counterparty": "J59CzBniLgCg6rh6",
+      "fidelity_bond_value": 385015791.0,
+      "offers": [
+        {
+          "cjfee": 1e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 993355203,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 351949732,
+      "bond_locktime": 1785542400,
+      "counterparty": "J5FNkogdUYtfxE42",
+      "fidelity_bond_value": 1405802773.0,
+      "offers": [
+        {
+          "cjfee": 0.000399,
+          "fee_type": "relative",
+          "maxsize_sats": 305853287,
+          "minsize_sats": 1073898,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2000996535,
+      "bond_locktime": 1809129600,
+      "counterparty": "J55zhNypnSPRMYiY",
+      "fidelity_bond_value": 22478604216.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 6563072024,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 3005401340,
+      "bond_locktime": 1819756800,
+      "counterparty": "J52jcvhi2NaDqj9D",
+      "fidelity_bond_value": 34565065008.0,
+      "offers": [
+        {
+          "cjfee": 0.003991,
+          "fee_type": "relative",
+          "maxsize_sats": 1082506885,
+          "minsize_sats": 199558,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 197662,
+      "bond_locktime": 1785542400,
+      "counterparty": "J554MBY9iWvcQPEi",
+      "fidelity_bond_value": 7053.0,
+      "offers": [
+        {
+          "cjfee": 20.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 433642,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 122709,
+      "bond_locktime": 1798761600,
+      "counterparty": "J5Dy23x6K55LTeTN",
+      "fidelity_bond_value": 17681.0,
+      "offers": [
+        {
+          "cjfee": 1.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 350706,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 492187,
+      "bond_locktime": 1788220800,
+      "counterparty": "J56mMDRbZcKc11v2",
+      "fidelity_bond_value": 29490.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 7691220,
+          "minsize_sats": 96796,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 6164533,
+      "bond_locktime": 1806537600,
+      "counterparty": "J5EKr9KJnnDR5rFG",
+      "fidelity_bond_value": 6743063.0,
+      "offers": [
+        {
+          "cjfee": 1.9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 13231636,
+          "minsize_sats": 91470,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 38711664,
+      "bond_locktime": 1843430400,
+      "counterparty": "J53T3Mrzyznak9dQ",
+      "fidelity_bond_value": 81332317.0,
+      "offers": [
+        {
+          "cjfee": 4.5794e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 16430033,
+          "minsize_sats": 97774,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 808486780,
+      "bond_locktime": 1864598400,
+      "counterparty": "J54qaj1Qmen3C4RY",
+      "fidelity_bond_value": 9820312019.0,
+      "offers": [
+        {
+          "cjfee": 0.001,
+          "fee_type": "relative",
+          "maxsize_sats": 132805645,
+          "minsize_sats": 300000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 5010000000,
+      "bond_locktime": 1806537600,
+      "counterparty": "J5ASymFMNsnHx77t",
+      "fidelity_bond_value": 53935149045.0,
+      "offers": [
+        {
+          "cjfee": 0.003984,
+          "fee_type": "relative",
+          "maxsize_sats": 1045958426,
+          "minsize_sats": 298656,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 878740182,
+      "bond_locktime": 1743465600,
+      "counterparty": "J56QYcKXsCJm2vPG",
+      "fidelity_bond_value": 4442824834.0,
+      "offers": [
+        {
+          "cjfee": 50.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 543802889,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 29488399,
+      "bond_locktime": 1788220800,
+      "counterparty": "J55xs4uxwFGoSBpD",
+      "fidelity_bond_value": 6331299.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 374676141,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1000000,
+      "bond_locktime": 1801440000,
+      "counterparty": "J5E2xiZZTq2P8Pyf",
+      "fidelity_bond_value": 236761.0,
+      "offers": [
+        {
+          "cjfee": 0.001,
+          "fee_type": "relative",
+          "maxsize_sats": 413732,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 26475320,
+      "bond_locktime": 1785542400,
+      "counterparty": "J56Sr3jsDBegqnVr",
+      "fidelity_bond_value": 18079939.0,
+      "offers": [
+        {
+          "cjfee": 2.86775e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 111981371,
+          "minsize_sats": 3382447,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        },
+        {
+          "cjfee": 97.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 3382447,
+          "minsize_sats": 200000,
+          "oid": 1,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1635621119,
+      "bond_locktime": 1814400000,
+      "counterparty": "J5D9SKLPeELL8sh6",
+      "fidelity_bond_value": 34399835598.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 1927147430,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 502778,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5AEXX8E9sCKZHDf",
+      "fidelity_bond_value": 32245.0,
+      "offers": [
+        {
+          "cjfee": 210.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 1886462,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2914122165,
+      "bond_locktime": 1935360000,
+      "counterparty": "J54sZk8FXuf8sxse",
+      "fidelity_bond_value": 72871738147.0,
+      "offers": [
+        {
+          "cjfee": 0.003999,
+          "fee_type": "relative",
+          "maxsize_sats": 1275255857,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 63046190,
+      "bond_locktime": 1798761600,
+      "counterparty": "J57hsUrQYyeyZzmm",
+      "fidelity_bond_value": 62469261.0,
+      "offers": [
+        {
+          "cjfee": 3.7e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 27721330,
+          "minsize_sats": 35000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 129700,
+      "bond_locktime": 1893456000,
+      "counterparty": "J59j2iRb8RdFm3Mj",
+      "fidelity_bond_value": 118820.0,
+      "offers": [
+        {
+          "cjfee": 2e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 4081872,
+          "minsize_sats": 1096482,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2402092,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5BaYRujZFnrbsAx",
+      "fidelity_bond_value": 211662.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 1898711,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 5095416,
+      "bond_locktime": 1785542400,
+      "counterparty": "J533mr8iqHjSerS1",
+      "fidelity_bond_value": 1098734.0,
+      "offers": [
+        {
+          "cjfee": 9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 47801095,
+          "minsize_sats": 1000000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 41538767,
+      "bond_locktime": 1796083200,
+      "counterparty": "J5BbSJejAQ3guhEQ",
+      "fidelity_bond_value": 34053471.0,
+      "offers": [
+        {
+          "cjfee": 0.00037,
+          "fee_type": "relative",
+          "maxsize_sats": 300646027,
+          "minsize_sats": 103686,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1376844,
+      "bond_locktime": 1782864000,
+      "counterparty": "J55Z1BhqxDFDMVGo",
+      "fidelity_bond_value": 34177.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 5512700,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2149492,
+      "bond_locktime": 1793491200,
+      "counterparty": "J55gawHD5qhqoh53",
+      "fidelity_bond_value": 294714.0,
+      "offers": [
+        {
+          "cjfee": 1.82014e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 30845046,
+          "minsize_sats": 94421,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 71891823,
+      "bond_locktime": 1780272000,
+      "counterparty": "J59oRLa3xue9uqg8",
+      "fidelity_bond_value": 13446875.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 273114965,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 229763,
+      "bond_locktime": 1785542400,
+      "counterparty": "J5FH3Qnz38ydNwnc",
+      "fidelity_bond_value": 5498.0,
+      "offers": [
+        {
+          "cjfee": 75.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 719049,
+          "minsize_sats": 30000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 135496,
+      "bond_locktime": 1777593600,
+      "counterparty": "J59bM8HqHKdURnBZ",
+      "fidelity_bond_value": 580.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 222539,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 300192447,
+      "bond_locktime": 1798761600,
+      "counterparty": "J5Be5WHnMt4JgoZ5",
+      "fidelity_bond_value": 602009121.0,
+      "offers": [
+        {
+          "cjfee": 5678.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 131812776,
+          "minsize_sats": 91234,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 3760000000,
+      "bond_locktime": 1840752000,
+      "counterparty": "J58rfNgpcMnKiVg2",
+      "fidelity_bond_value": 28917230815.0,
+      "offers": [
+        {
+          "cjfee": 0.000499,
+          "fee_type": "relative",
+          "maxsize_sats": 58621391,
+          "minsize_sats": 310592,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 100000000,
+      "bond_locktime": 1882915200,
+      "counterparty": "J5CsTNqoGFuZC8Sz",
+      "fidelity_bond_value": 676656075.0,
+      "offers": [
+        {
+          "cjfee": 2179.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 82082420,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1430156,
+      "bond_locktime": 1793491200,
+      "counterparty": "J5D3z1NSaAzeaeVb",
+      "fidelity_bond_value": 774798.0,
+      "offers": [
+        {
+          "cjfee": 247.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 15922202,
+          "minsize_sats": 90000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 6912949,
+      "bond_locktime": 1782864000,
+      "counterparty": "J55EMVVNYp4CsXCA",
+      "fidelity_bond_value": 1335050.0,
+      "offers": [
+        {
+          "cjfee": 541.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 6280230,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2165341699,
+      "bond_locktime": 1788220800,
+      "counterparty": "J59i6MUFrEf86XF5",
+      "fidelity_bond_value": 8739267009.0,
+      "offers": [
+        {
+          "cjfee": 0.000299,
+          "fee_type": "relative",
+          "maxsize_sats": 923023789,
+          "minsize_sats": 383038,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 8232484,
+      "bond_locktime": 1803859200,
+      "counterparty": "J53PUYx2pJsghAxX",
+      "fidelity_bond_value": 3094486.0,
+      "offers": [
+        {
+          "cjfee": 1.88635e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 51997601,
+          "minsize_sats": 101489,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 20099222,
+      "bond_locktime": 1788220800,
+      "counterparty": "J58q3HjDDSMuZUfs",
+      "fidelity_bond_value": 2846339.0,
+      "offers": [
+        {
+          "cjfee": 0.0002,
+          "fee_type": "relative",
+          "maxsize_sats": 4859741,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 79539,
+      "bond_locktime": 1785542400,
+      "counterparty": "J5DjDYvjck5KctRV",
+      "fidelity_bond_value": 1473.0,
+      "offers": [
+        {
+          "cjfee": 1.1e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 2723349,
+          "minsize_sats": 300000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 4000000000,
+      "bond_locktime": 1840752000,
+      "counterparty": "J5Anq27tW5DqX1p2",
+      "fidelity_bond_value": 32154488686.0,
+      "offers": [
+        {
+          "cjfee": 0.000499,
+          "fee_type": "relative",
+          "maxsize_sats": 337884197,
+          "minsize_sats": 316259,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1382756,
+      "bond_locktime": 1780272000,
+      "counterparty": "J55EKoCKL3UYuD3A",
+      "fidelity_bond_value": 158142.0,
+      "offers": [
+        {
+          "cjfee": 299.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 85724607,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 499717,
+      "bond_locktime": 1809129600,
+      "counterparty": "J53v2aSnkDipHcJK",
+      "fidelity_bond_value": 120767.0,
+      "offers": [
+        {
+          "cjfee": 0.0003,
+          "fee_type": "relative",
+          "maxsize_sats": 1976574,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2001629,
+      "bond_locktime": 1788220800,
+      "counterparty": "J53QgBbmLjLmZmJu",
+      "fidelity_bond_value": 148636.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 88060001,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 4299854,
+      "bond_locktime": 1796083200,
+      "counterparty": "J5BDvwtDAfFcAeeL",
+      "fidelity_bond_value": 1694797.0,
+      "offers": [
+        {
+          "cjfee": 0.00025,
+          "fee_type": "relative",
+          "maxsize_sats": 11284244,
+          "minsize_sats": 500000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 314393,
+      "bond_locktime": 1785542400,
+      "counterparty": "J5Pwn6VhJTCVPGVO",
+      "fidelity_bond_value": 13965.0,
+      "offers": [
+        {
+          "cjfee": 0.0028928721,
+          "fee_type": "relative",
+          "maxsize_sats": 1264200,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 10601588,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5Drs3qM7wLZvGR2",
+      "fidelity_bond_value": 5501194.0,
+      "offers": [
+        {
+          "cjfee": 2.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 6749019,
+          "minsize_sats": 524813,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1500000538,
+      "bond_locktime": 1827619200,
+      "counterparty": "J5BoCTs8FD2iMB7Y",
+      "fidelity_bond_value": 8357448083.0,
+      "offers": [
+        {
+          "cjfee": 0.000309,
+          "fee_type": "relative",
+          "maxsize_sats": 26067491593,
+          "minsize_sats": 692232,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 23975233,
+      "bond_locktime": 1898553600,
+      "counterparty": "J56T4Hfu912oBFqC",
+      "fidelity_bond_value": 154799523.0,
+      "offers": [
+        {
+          "cjfee": 4.9e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 150290830,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 50861280,
+      "bond_locktime": 1846022400,
+      "counterparty": "J5Duj9a1W8JRgvxk",
+      "fidelity_bond_value": 133549776.0,
+      "offers": [
+        {
+          "cjfee": 0.003385,
+          "fee_type": "relative",
+          "maxsize_sats": 3264250,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 3895413,
+      "bond_locktime": 1785542400,
+      "counterparty": "J56FWpk5qHStYzSm",
+      "fidelity_bond_value": 867531.0,
+      "offers": [
+        {
+          "cjfee": 0.0001,
+          "fee_type": "relative",
+          "maxsize_sats": 2063989,
+          "minsize_sats": 500000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2999843,
+      "bond_locktime": 1782864000,
+      "counterparty": "J5aFxRvKhPLLBDPO",
+      "fidelity_bond_value": 227798.0,
+      "offers": [
+        {
+          "cjfee": 0.0002,
+          "fee_type": "relative",
+          "maxsize_sats": 8675212,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 29823,
+      "bond_locktime": 1785542400,
+      "counterparty": "J56XqXRvciT8WhR7",
+      "fidelity_bond_value": 609.0,
+      "offers": [
+        {
+          "cjfee": 9.2e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 4543781,
+          "minsize_sats": 75000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 198445424,
+      "bond_locktime": 1819756800,
+      "counterparty": "J54krRrrye9ccZHa",
+      "fidelity_bond_value": 567000513.0,
+      "offers": [
+        {
+          "cjfee": 1.8e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 296977396,
+          "minsize_sats": 870362,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 65404050,
+      "bond_locktime": 1830297600,
+      "counterparty": "J5Cu7arGWYsSP3QM",
+      "fidelity_bond_value": 157994993.0,
+      "offers": [
+        {
+          "cjfee": 2000.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 50914935,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 3405460,
+      "bond_locktime": 1782864000,
+      "counterparty": "J56PRGJVw2cAdHq2",
+      "fidelity_bond_value": 128190.0,
+      "offers": [
+        {
+          "cjfee": 2000.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 56394553,
+          "minsize_sats": 100000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1106880,
+      "bond_locktime": 1922313600,
+      "counterparty": "J5mwcrGQVnAJgh6O",
+      "fidelity_bond_value": 4873875.0,
+      "offers": [
+        {
+          "cjfee": 9e-06,
+          "fee_type": "relative",
+          "maxsize_sats": 1041313047,
+          "minsize_sats": 1000000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 20065211,
+      "bond_locktime": 1798761600,
+      "counterparty": "J5BvLUY5fUPALodP",
+      "fidelity_bond_value": 13127941.0,
+      "offers": [
+        {
+          "cjfee": 1000.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 27148308,
+          "minsize_sats": 50000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1242635,
+      "bond_locktime": 1790812800,
+      "counterparty": "J5F2vSvCEgUtACm1",
+      "fidelity_bond_value": 100951.0,
+      "offers": [
+        {
+          "cjfee": 10.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 4430763,
+          "minsize_sats": 80000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 108267,
+      "bond_locktime": 1956528000,
+      "counterparty": "J56YmpvKBRBc5tKS",
+      "fidelity_bond_value": 167784.0,
+      "offers": [
+        {
+          "cjfee": 0.0003053154,
+          "fee_type": "relative",
+          "maxsize_sats": 1268068,
+          "minsize_sats": 301327,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        },
+        {
+          "cjfee": 92.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 301327,
+          "minsize_sats": 30000,
+          "oid": 1,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 125000000,
+      "bond_locktime": 1780272000,
+      "counterparty": "J5Be4yL3RXhi2ixp",
+      "fidelity_bond_value": 366922375.0,
+      "offers": [
+        {
+          "cjfee": 4997.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 16146911,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 695651,
+      "bond_locktime": 1806537600,
+      "counterparty": "J5AMdjeSdH8NbtQC",
+      "fidelity_bond_value": 167448.0,
+      "offers": [
+        {
+          "cjfee": 250.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 839771,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 201978000,
+      "bond_locktime": 1922313600,
+      "counterparty": "J58W3ZW2aTnfb6Uv",
+      "fidelity_bond_value": 3003056727.0,
+      "offers": [
+        {
+          "cjfee": 4980.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 27098701,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 604915008,
+      "bond_locktime": 1825027200,
+      "counterparty": "J5DTUCESDZJqqt7K",
+      "fidelity_bond_value": 2874162521.0,
+      "offers": [
+        {
+          "cjfee": 0.0002943517,
+          "fee_type": "relative",
+          "maxsize_sats": 34400452,
+          "minsize_sats": 90124,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 122888659,
+      "bond_locktime": 1830297600,
+      "counterparty": "J5Ahaa1KwJw3Q3Po",
+      "fidelity_bond_value": 340649668.0,
+      "offers": [
+        {
+          "cjfee": 1e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 469171243,
+          "minsize_sats": 5500000,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 4999196,
+      "bond_locktime": 1822348800,
+      "counterparty": "J59xPhheauJacyCq",
+      "fidelity_bond_value": 5211288.0,
+      "offers": [
+        {
+          "cjfee": 0.000309,
+          "fee_type": "relative",
+          "maxsize_sats": 44307565,
+          "minsize_sats": 642107,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 216554441,
+      "bond_locktime": 1754006400,
+      "counterparty": "J589QEKQFTy9vVW2",
+      "fidelity_bond_value": 196611032.0,
+      "offers": [
+        {
+          "cjfee": 3.8e-05,
+          "fee_type": "relative",
+          "maxsize_sats": 1279418492,
+          "minsize_sats": 1051720,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 27300,
+      "bond_locktime": 4091904000,
+      "counterparty": "J56xf894jTdiwMEQ",
+      "fidelity_bond_value": 584805.0,
+      "offers": [
+        {
+          "cjfee": 0.003768,
+          "fee_type": "relative",
+          "maxsize_sats": 175841982,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 1000,
+      "bond_locktime": 4097174400,
+      "counterparty": "J561izafqfjCf6GP",
+      "fidelity_bond_value": 7943.0,
+      "offers": [
+        {
+          "cjfee": 0.003009,
+          "fee_type": "relative",
+          "maxsize_sats": 150468551,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 546,
+      "bond_locktime": 4099766400,
+      "counterparty": "J5CfVCeFFk6s7g2w",
+      "fidelity_bond_value": 3617.0,
+      "offers": [
+        {
+          "cjfee": 0.003599,
+          "fee_type": "relative",
+          "maxsize_sats": 138523659,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 41762829,
+      "bond_locktime": 1809129600,
+      "counterparty": "J59dj9a6EhMEBCpG",
+      "fidelity_bond_value": 90442294.0,
+      "offers": [
+        {
+          "cjfee": 4400.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 117273,
+          "minsize_sats": 27400,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": 2655225585,
+      "bond_locktime": 1790812800,
+      "counterparty": "J55RY4vBMAc1NqSE",
+      "fidelity_bond_value": 23476727322.0,
+      "offers": [
+        {
+          "cjfee": 3e-06,
+          "fee_type": "relative",
+          "maxsize_sats": 99999999,
+          "minsize_sats": 10000000,
+          "oid": 1,
+          "ordertype": "sw0reloffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": null,
+      "bond_locktime": null,
+      "counterparty": "J55m4ngy3pUQu73p",
+      "fidelity_bond_value": 0.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 805758,
+          "minsize_sats": 28726,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": null,
+      "bond_locktime": null,
+      "counterparty": "J56q5dxMfm1MeFZN",
+      "fidelity_bond_value": 0.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 15439168,
+          "minsize_sats": 104170,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": null,
+      "bond_locktime": null,
+      "counterparty": "J56SiPmANz7QnZ3k",
+      "fidelity_bond_value": 0.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 36778460,
+          "minsize_sats": 94672,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": null,
+      "bond_locktime": null,
+      "counterparty": "J59pYB1BHbBQp3g9",
+      "fidelity_bond_value": 0.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 478175687,
+          "minsize_sats": 10000,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    },
+    {
+      "bond_amount_sats": null,
+      "bond_locktime": null,
+      "counterparty": "J54dztn5EnoZqAG4",
+      "fidelity_bond_value": 0.0,
+      "offers": [
+        {
+          "cjfee": 0.0,
+          "fee_type": "absolute",
+          "maxsize_sats": 571422,
+          "minsize_sats": 27300,
+          "oid": 0,
+          "ordertype": "sw0absoffer",
+          "txfee_sats": 0
+        }
+      ]
+    }
+  ],
+  "distributions": {
+    "absolute_cjfees_sats": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      2.0,
+      5.0,
+      10.0,
+      20.0,
+      21.0,
+      50.0,
+      51.0,
+      75.0,
+      92.0,
+      97.0,
+      210.0,
+      247.0,
+      250.0,
+      250.0,
+      299.0,
+      492.0,
+      541.0,
+      1000.0,
+      1430.0,
+      2000.0,
+      2000.0,
+      2179.0,
+      4400.0,
+      4980.0,
+      4997.0,
+      5500.0,
+      5678.0
+    ],
+    "bond_values": [
+      580.0,
+      609.0,
+      1473.0,
+      3617.0,
+      5498.0,
+      7053.0,
+      7943.0,
+      8695.0,
+      13965.0,
+      17681.0,
+      22540.0,
+      29490.0,
+      32245.0,
+      34177.0,
+      66140.0,
+      94239.0,
+      100951.0,
+      102032.0,
+      102206.0,
+      118820.0,
+      120767.0,
+      128190.0,
+      136391.0,
+      148636.0,
+      158142.0,
+      167448.0,
+      167784.0,
+      178001.0,
+      211662.0,
+      227798.0,
+      236761.0,
+      294714.0,
+      372586.0,
+      508868.0,
+      584805.0,
+      651841.0,
+      774798.0,
+      867531.0,
+      1098734.0,
+      1325809.0,
+      1335050.0,
+      1694797.0,
+      1797751.0,
+      2846339.0,
+      3094486.0,
+      4140285.0,
+      4873875.0,
+      5211288.0,
+      5501194.0,
+      6331299.0,
+      6743063.0,
+      13127941.0,
+      13446875.0,
+      18079939.0,
+      26765768.0,
+      34053471.0,
+      34092384.0,
+      57600791.0,
+      62469261.0,
+      81332317.0,
+      90442294.0,
+      133549776.0,
+      154799523.0,
+      157994993.0,
+      196611032.0,
+      205632548.0,
+      308185473.0,
+      340649668.0,
+      354246995.0,
+      366922375.0,
+      385015791.0,
+      567000513.0,
+      602009121.0,
+      676656075.0,
+      700029276.0,
+      1024084441.0,
+      1405802773.0,
+      2147295058.0,
+      2874162521.0,
+      3003056727.0,
+      4442824834.0,
+      8007055590.0,
+      8357448083.0,
+      8739267009.0,
+      9820312019.0,
+      22478604216.0,
+      23476727322.0,
+      28520283935.0,
+      28917230815.0,
+      32154488686.0,
+      34399835598.0,
+      34565065008.0,
+      53935149045.0,
+      72871738147.0
+    ],
+    "max_sizes_sats": [
+      117273,
+      222539,
+      350706,
+      413732,
+      433642,
+      550547,
+      571422,
+      719049,
+      805758,
+      839771,
+      883820,
+      1264200,
+      1268068,
+      1309052,
+      1359231,
+      1886462,
+      1898711,
+      1976574,
+      2063989,
+      2077295,
+      2723349,
+      2973350,
+      3264250,
+      4081872,
+      4430763,
+      4543781,
+      4859741,
+      5352700,
+      5512700,
+      5825038,
+      6280230,
+      6749019,
+      7691220,
+      8407728,
+      8675212,
+      10405027,
+      11284244,
+      13231636,
+      15439168,
+      15922202,
+      16146911,
+      16214931,
+      16430033,
+      23870652,
+      27098701,
+      27148308,
+      27721330,
+      30845046,
+      34400452,
+      36778460,
+      44307565,
+      47801095,
+      50914935,
+      51997601,
+      56394553,
+      56520033,
+      58621391,
+      67111698,
+      82082420,
+      85724607,
+      88060001,
+      99999999,
+      100669062,
+      111981371,
+      131812776,
+      132805645,
+      138523659,
+      150290830,
+      150468551,
+      173378981,
+      175841982,
+      202740139,
+      227731078,
+      243917715,
+      273114965,
+      289544523,
+      296977396,
+      300646027,
+      305853287,
+      337884197,
+      374676141,
+      469171243,
+      478175687,
+      543802889,
+      699926412,
+      782979538,
+      797209314,
+      798158193,
+      923023789,
+      931371803,
+      993355203,
+      1041313047,
+      1045958426,
+      1082506885,
+      1275255857,
+      1279418492,
+      1927147430,
+      6563072024,
+      26067491593
+    ],
+    "relative_cjfees": [
+      3e-06,
+      9e-06,
+      9e-06,
+      1e-05,
+      1e-05,
+      1e-05,
+      1.1e-05,
+      1.5e-05,
+      1.8e-05,
+      1.82014e-05,
+      1.88635e-05,
+      1.9e-05,
+      1.9e-05,
+      2e-05,
+      2.10976e-05,
+      2.86775e-05,
+      3.1e-05,
+      3.7e-05,
+      3.7e-05,
+      3.8e-05,
+      4.5794e-05,
+      4.9e-05,
+      9e-05,
+      9e-05,
+      9.2e-05,
+      9.9e-05,
+      9.9e-05,
+      0.0001,
+      0.0001,
+      0.0002,
+      0.0002,
+      0.00025,
+      0.0002943517,
+      0.000299,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003,
+      0.0003053154,
+      0.000309,
+      0.000309,
+      0.00037,
+      0.000399,
+      0.000499,
+      0.000499,
+      0.00069,
+      0.001,
+      0.001,
+      0.0028928721,
+      0.003009,
+      0.003385,
+      0.003599,
+      0.003768,
+      0.003984,
+      0.003991,
+      0.003999,
+      0.003999,
+      0.003999,
+      0.003999,
+      0.003999,
+      0.003999
+    ]
+  },
+  "fetched_at": 1779440220,
+  "n_bonded_counterparties": 94,
+  "n_total_offers": 1961,
+  "n_zero_fee_bondless": 5,
+  "source_url": "https://joinmarket-ng.sgn.space/orderbook.json"
+}

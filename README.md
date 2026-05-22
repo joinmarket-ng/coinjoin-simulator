@@ -1,93 +1,44 @@
 # CoinJoin Simulator
 
-Compact simulation toolkit for analyzing CoinJoin privacy under probing and adversarial taker pressure.
+A simulation engine for evaluating privacy attacks and anonymity metrics in CoinJoin protocols,
+with a focus on JoinMarket-style maker/taker architectures.
 
-This repository is curated for publishing: it keeps the key datasets, a focused GitHub Pages report, and the core simulation code.
+## What it does
 
-## What This Repository Shows
+The simulator models realistic JoinMarket networks, including maker wallet structures, fidelity
+bonds, and mixdepths sampled from live orderbook data. It lets you run controlled experiments
+against different attack models (probing, Sybil, role identification, surveillance) and measure
+their impact on taker anonymity sets.
 
-The published report focuses on four high-signal views:
+## Published studies
 
-1. Mitigation impact at fixed CoinJoin size (8 makers/CJ)
-2. Long-run sustained attack outcomes (baseline vs recommended policy)
-3. Probe-intensity privacy/cost trade-off
-4. Attack-to-recovery timeline
+Results from two studies run with this simulator are available on the
+[project site](https://joinmarket-ng.github.io/coinjoin-simulator/):
 
-Published output:
+- **Probing attack and countermeasures** - how a malicious participant builds a UTXO database
+  of makers by probing, and which protocol changes limit the leakage
+- **JoinMarket equal-output anonymity in practice** - a fee-fingerprint clustering and
+  forward-spend attribution attack replayed against a mainnet JoinMarket corpus
 
-- `docs/index.html`
-- `docs/publish_summary.json`
+## Getting started
 
-## Quick Start
+Requires Python 3.11+.
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-Requires Python 3.11+.
-
-Generate the curated publish page from the tracked datasets:
+Run the test suite:
 
 ```bash
-PYTHONPATH=src python -m coinjoin_simulator.publish_site \
-  --mitigation mitigation_experiments.json \
-  --longrun longrun_policy_results.json \
-  --daily daily_cost_study_results.json \
-  --output docs/index.html \
-  --data-output docs/publish_summary.json
+pytest tests/
 ```
 
-You can also run it through the CLI:
+Rebuild the published site from the pinned study datasets:
 
 ```bash
-PYTHONPATH=src python -m coinjoin_simulator publish-site
-```
-
-## Reproduce Input Datasets
-
-These scripts regenerate the three datasets consumed by the publish page:
-
-- `run_mitigation_experiments.py` -> `mitigation_experiments.json`
-- `run_longrun_policy_study.py` -> `longrun_policy_results.json`
-- `run_daily_cost_study.py` -> `daily_cost_study_results.json`
-
-Note: these studies sample from the live JoinMarket orderbook URL configured in `src/coinjoin_simulator/network.py`.
-
-## Core CLI Commands
-
-```bash
-# list built-in scenarios
-coinjoin-sim list
-
-# run one scenario
-coinjoin-sim run --scenario naive_baseline
-
-# run all scenarios
-coinjoin-sim benchmark
-
-# run realistic network sweep
-coinjoin-sim network --makers 100 --rounds 1000 --evil-fractions 0.0,0.2,0.4,0.6
-```
-
-## Repository Layout
-
-```text
-src/coinjoin_simulator/
-  network.py         realistic maker/probing simulator
-  publish.py         curated metric extraction
-  publish_site.py    GitHub Pages report generation
-  ...                core anonymity/sybil/role/surveillance modules
-
-tests/               unit tests
-docs/                publish-ready report assets for GitHub Pages
-```
-
-## Development Checks
-
-```bash
-PYTHONPATH=src ruff check .
-PYTHONPATH=src mypy src/
-PYTHONPATH=src pytest
+python -m coinjoin_simulator.publish_site
+python build_docs.py
 ```
 
 ## License
