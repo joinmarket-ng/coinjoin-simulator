@@ -1278,6 +1278,13 @@ probed nicks):
 | `cm_no_same_mixdepth_change`  |   76,992 |        0.231 |          3.18 |              7.76% |
 | `cm_combined`                 |  100,000 |        0.000 |          5.00 |              0.00% |
 
+![Mean residual anonymity set and share of CJs with residual = 1
+across the seven countermeasure variants of §9.3 (100k slots,
+$n_{eq} = 5$, v7 loose gate). The two within-protocol fee
+variants sit on top of the baseline; the §9.2 protocol changes
+move both metrics, and `cm_combined` restores the full
+$n_{eq} = 5$ anonymity set.](figures/countermeasure_effectiveness.svg)
+
 Reading the table. *Mean residual* is the per-CJ residual
 anonymity set averaged across all 20,000 simulated CJs (5.00
 means every published equal output remains in the anonset; 0.00
