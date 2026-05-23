@@ -124,6 +124,8 @@ class AttributionStats:
 def attribute_equal_outputs(
     slots: Sequence[MakerSlotV7],
     equal_outpoints_by_tx: Mapping[str, Iterable[str]],
+    *,
+    strict: bool = False,
 ) -> tuple[dict[str, int], AttributionStats]:
     """Attribute reused equal outputs to specific producer slots by fee match.
 
@@ -135,6 +137,16 @@ def attribute_equal_outputs(
         For each producing CJ ``T``, an iterable of canonical outpoint
         strings (``txid:vout``) that carry T's equal-amount value.
         Caller obtains these from the CJ's vout list.
+    strict:
+        If True, only emit an attribution edge when *both* the absolute
+        and the relative fee fingerprint independently identify the
+        same unique producer slot (corresponding to the
+        ``unique_both_same_slot`` bucket). This rejects single-criterion
+        matches whose target slot may have coincidentally collided with
+        the consumer fingerprint under per-announcement jitter (see
+        \u00a76.1 discussion of the scaled simulator). The default
+        ``False`` reproduces the original v7 behaviour
+        (``unique_either``).
 
     Returns
     -------
@@ -212,11 +224,13 @@ def attribute_equal_outputs(
                     else:
                         n_both_diff += 1
                 elif abs_unique:
-                    chosen = abs_hits[0]
+                    if not strict:
+                        chosen = abs_hits[0]
                     n_abs += 1
                     n_uniq_either += 1
                 elif rel_unique:
-                    chosen = rel_hits[0]
+                    if not strict:
+                        chosen = rel_hits[0]
                     n_rel += 1
                     n_uniq_either += 1
                 elif not abs_hits and not rel_hits:
@@ -270,6 +284,8 @@ def _build_index_v7(slots: Sequence[MakerSlotV7]) -> _IndexV7:
 def cluster_v7(
     slots: Sequence[MakerSlotV7],
     equal_outpoints_by_tx: Mapping[str, Iterable[str]] | None = None,
+    *,
+    strict: bool = False,
 ) -> tuple[dict[int, int], AttributionStats]:
     """Run the v7 clusterer.
 
@@ -284,8 +300,13 @@ def cluster_v7(
        producer slot can be identified by fee fingerprint, union it
        with the consumer slot(s).
 
-    Returns ``(labels, stats)`` where ``labels`` is the standard
-    ``slot_idx -> cluster_id`` mapping (dense, 0..n_clusters-1).
+    ``strict=True`` tightens the v7 attribution gate so that an edge is
+    only added when both the absolute and the relative fingerprint
+    point at the same unique producer slot. This blocks the
+    single-criterion false unions that the scaled-simulator experiment
+    (\u00a76.1) demonstrated under per-announcement fee jitter, at the
+    cost of recall (the recovered chain set shrinks roughly to the
+    ``unique_both_same_slot`` bucket).
     """
     idx = _build_index_v7(slots)
     uf = _ConstrainedUnionFind()
@@ -314,7 +335,9 @@ def cluster_v7(
     # v7 fee-fingerprint equal-output edges.
     stats = AttributionStats()
     if equal_outpoints_by_tx:
-        edges, stats = attribute_equal_outputs(slots, equal_outpoints_by_tx)
+        edges, stats = attribute_equal_outputs(
+            slots, equal_outpoints_by_tx, strict=strict,
+        )
         for outpoint, producer_slot_id in edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
                 if consumer_id == producer_slot_id:

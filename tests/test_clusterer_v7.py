@@ -252,3 +252,51 @@ def test_cluster_v7_adversarial_collision_must_not_link() -> None:
     assert labels[2] != labels[3]
     # Tpp's two slots must not collide.
     assert labels[4] != labels[5]
+
+
+# ---------------------------------------------------------------------------
+# Strict-mode gate (introduced after the 500-maker / 20k-round scaled
+# simulator experiment in tmp/v7/eval_simulator_scaled.py revealed that
+# under per-announcement fee jitter the unique-either gate can union
+# unrelated makers whose jittered fingerprints coincide).
+# ---------------------------------------------------------------------------
+
+
+def test_strict_mode_blocks_unique_abs_only_edges() -> None:
+    # Producer slot 1 is the unique absolute-fee match for the consumer,
+    # but its relative ppm differs from the consumer's. Default
+    # behaviour unions; strict mode does not.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=137, eq_amt=10_000),
+        _slot("T", "T-m2", fee=200, eq_amt=10_000),
+        # Consumer fee matches T-m1 abs (137) but eq_amt differs so rel
+        # ppm doesn't match T-m1 (137 / 50_000 * 1e6 = 2740 vs T-m1
+        # 13700).
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=137, eq_amt=50_000),
+    ]
+    labels_loose, stats_loose = cluster_v7(slots, {"T": ["T:0"]})
+    labels_strict, stats_strict = cluster_v7(slots, {"T": ["T:0"]}, strict=True)
+    # Stats counters fire identically in both modes (they describe the
+    # population of cross-CJ reuses, not the gate decision).
+    assert stats_loose.unique_abs_only == 1
+    assert stats_strict.unique_abs_only == 1
+    # Loose: T-m1 (slot 1) and Tp-m0 (slot 3) unioned.
+    assert labels_loose[1] == labels_loose[3]
+    # Strict: no union, slots stay in separate clusters.
+    assert labels_strict[1] != labels_strict[3]
+
+
+def test_strict_mode_keeps_unique_both_same_slot_edges() -> None:
+    # Producer slot 1 is the unique slot under BOTH abs and rel
+    # interpretations; strict mode keeps the union.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=137, eq_amt=10_000),
+        _slot("T", "T-m2", fee=200, eq_amt=10_000),
+        # Consumer with same eq_amt -> same ppm; abs already unique.
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=137, eq_amt=10_000),
+    ]
+    labels_strict, stats_strict = cluster_v7(slots, {"T": ["T:0"]}, strict=True)
+    assert stats_strict.unique_both_same_slot == 1
+    assert labels_strict[1] == labels_strict[3]
