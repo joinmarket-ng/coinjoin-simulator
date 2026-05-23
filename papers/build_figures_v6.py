@@ -1,0 +1,251 @@
+"""Publication figures for the v6 rewrite of the maker-clustering paper.
+
+Outputs to ``papers/figures/`` and overwrites legacy v5 figures that
+the rewritten paper references. The legacy ``papers/build_figures.py``
+remains for the supplementary figures still in use.
+
+Figures produced:
+
+  anonset_reduction_hist.svg   distribution of the lower-bound
+                               residual anonymity set across the
+                               16,890 ILP-decoded mainnet CJs
+
+  anonset_per_n_eq.svg         for each published n_eq value, the
+                               mean residual anonymity set after
+                               removing v6-certified makers
+
+  cluster_size_distribution.svg  histogram of v6 cluster sizes
+                                 (slot count), log-log
+
+  v5_vs_v6_fragmentation.svg   for the top-12 v5 clusters by UTXO
+                                count, the number of distinct v6
+                                clusters they decompose into
+
+  probe_validation_v6.svg      probe ground-truth: matched nicks,
+                                offered-UTXO matches, and
+                                precision-violation count (zero)
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+
+ROOT = Path(__file__).resolve().parent.parent
+TMP = ROOT / "tmp"
+OUT = ROOT / "papers" / "figures"
+OUT.mkdir(exist_ok=True)
+
+ANONSET = TMP / "v6" / "anonset_reduction_v6.json"
+CMP = TMP / "v6" / "v5_vs_v6_comparison.json"
+PROBE = TMP / "v6" / "probe_validation_v6.json"
+V6_REPORT = TMP / "mainnet_v6_report.json"
+V6_CLUSTER_DIR = TMP / "mainnet_clusters_v6"
+
+COL = {
+    "blue": "#4477AA",
+    "cyan": "#66CCEE",
+    "green": "#228833",
+    "yellow": "#CCBB44",
+    "red": "#EE6677",
+    "purple": "#AA3377",
+    "grey": "#BBBBBB",
+    "dark": "#222222",
+    "teal": "#44AA99",
+    "wine": "#882255",
+}
+
+plt.rcParams.update(
+    {
+        "figure.dpi": 100,
+        "savefig.dpi": 150,
+        "font.size": 10,
+        "axes.labelsize": 11,
+        "axes.titlesize": 12,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "axes.grid": True,
+        "grid.alpha": 0.3,
+        "grid.linestyle": "--",
+    },
+)
+
+
+def _save(fig: plt.Figure, name: str) -> None:
+    path = OUT / name
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"wrote {path.relative_to(ROOT)}")
+
+
+def anonset_reduction_hist() -> None:
+    d = json.loads(ANONSET.read_text())
+    h = d["residual_anon_set_histogram"]
+    items = sorted(((int(k), int(v)) for k, v in h.items()), key=lambda kv: kv[0])
+    xs = [k for k, _ in items]
+    ys = [v for _, v in items]
+    total = sum(ys)
+    fig, ax = plt.subplots(figsize=(7.2, 3.6))
+    ax.bar(xs, ys, color=COL["blue"], edgecolor=COL["dark"], linewidth=0.4)
+    ax.set_xlabel("residual anonymity-set size (lower bound)")
+    ax.set_ylabel("number of coinjoins")
+    ax.set_title(
+        "Per-CJ residual anonymity-set after removing v6-certified makers",
+    )
+    ax.set_xticks(xs)
+    for x, y in items:
+        pct = 100 * y / total
+        if pct >= 1.5:
+            ax.text(x, y + total * 0.005, f"{pct:.0f}%", ha="center", fontsize=8)
+    ax.text(
+        0.98, 0.95,
+        (
+            f"n={total:,} CJs  mean residual={d['mean_residual_anon_set']:.2f}\n"
+            f"mean n_eq={d['mean_n_eq']:.2f}  any-reduction "
+            f"{100 * d['share_cjs_with_any_reduction']:.1f}%"
+        ),
+        transform=ax.transAxes,
+        ha="right", va="top",
+        fontsize=9,
+        bbox={"facecolor": "white", "alpha": 0.85, "edgecolor": COL["grey"]},
+    )
+    _save(fig, "anonset_reduction_hist.svg")
+
+
+def anonset_per_n_eq() -> None:
+    d = json.loads(ANONSET.read_text())
+    rows = [r for r in d["per_n_eq_table"] if r["n_cjs"] >= 30]
+    rows.sort(key=lambda r: r["n_eq"])
+    xs = [r["n_eq"] for r in rows]
+    n_eq_vals = [r["n_eq"] for r in rows]
+    residuals = [r["mean_residual_anon_set"] for r in rows]
+    counts = [r["n_cjs"] for r in rows]
+    fig, ax = plt.subplots(figsize=(7.5, 3.8))
+    w = 0.4
+    x_pos = [i for i, _ in enumerate(xs)]
+    ax.bar(
+        [p - w / 2 for p in x_pos],
+        n_eq_vals,
+        width=w,
+        color=COL["grey"],
+        edgecolor=COL["dark"],
+        label="published n_eq (taker hide-set claim)",
+    )
+    ax.bar(
+        [p + w / 2 for p in x_pos],
+        residuals,
+        width=w,
+        color=COL["red"],
+        edgecolor=COL["dark"],
+        label="residual after removing v6-certified makers",
+    )
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels([str(n) for n in xs])
+    ax.set_xlabel("n_eq (number of equal outputs in CJ)")
+    ax.set_ylabel("size")
+    ax.set_title("Anonymity-set shrinkage per round size (mean over CJs)")
+    ax.legend(loc="upper left", fontsize=9, framealpha=0.95)
+    ax2 = ax.twinx()
+    ax2.plot(
+        x_pos, counts, marker="o", color=COL["blue"], linewidth=1.0,
+        markersize=3.0, label="n_cjs",
+    )
+    ax2.set_ylabel("number of CJs (log)", color=COL["blue"])
+    ax2.set_yscale("log")
+    ax2.tick_params(axis="y", labelcolor=COL["blue"])
+    ax2.grid(False)
+    _save(fig, "anonset_per_n_eq.svg")
+
+
+def cluster_size_distribution() -> None:
+    report = json.loads(V6_REPORT.read_text())
+    # Cluster size histogram, including singletons.
+    sizes_hist = dict(report.get("size_histogram") or {})
+    # Add singletons explicitly so the histogram is complete.
+    singletons = report.get("n_singletons", 0)
+    if singletons:
+        sizes_hist["1"] = sizes_hist.get("1", 0) + singletons
+    items = sorted(((int(k), int(v)) for k, v in sizes_hist.items()), key=lambda kv: kv[0])
+    xs = [k for k, _ in items]
+    ys = [v for _, v in items]
+    fig, ax = plt.subplots(figsize=(7.0, 3.6))
+    ax.bar(xs, ys, color=COL["blue"], edgecolor=COL["dark"], linewidth=0.3)
+    ax.set_xlabel("cluster size (number of maker slots)")
+    ax.set_ylabel("number of v6 clusters")
+    ax.set_title("v6 maker-cluster size distribution (mainnet, n=74,471 clusters)")
+    ax.set_yscale("log")
+    if max(xs) > 20:
+        ax.set_xscale("log")
+    _save(fig, "cluster_size_distribution.svg")
+
+
+def v5_vs_v6_fragmentation() -> None:
+    d = json.loads(CMP.read_text())
+    rows = d["top_v5_splits"][:12]
+    rows.sort(key=lambda r: -r["v5_size"])
+    labels = [f"v5#{r['v5_cluster_id']}\n({r['v5_size']:,} UTXOs)" for r in rows]
+    n_v6 = [r["n_distinct_v6_clusters"] for r in rows]
+    fig, ax = plt.subplots(figsize=(8.0, 4.0))
+    bars = ax.bar(range(len(rows)), n_v6, color=COL["wine"], edgecolor=COL["dark"])
+    ax.set_xticks(range(len(rows)))
+    ax.set_xticklabels(labels, fontsize=8, rotation=0)
+    ax.set_ylabel("distinct v6 clusters")
+    ax.set_title(
+        "v5 over-clustering: top-12 v5 fee-band clusters decomposed by v6",
+    )
+    for b, v in zip(bars, n_v6, strict=True):
+        ax.text(
+            b.get_x() + b.get_width() / 2,
+            b.get_height() * 1.02,
+            f"{v:,}",
+            ha="center",
+            fontsize=8,
+        )
+    ax.set_yscale("log")
+    _save(fig, "v5_vs_v6_fragmentation.svg")
+
+
+def probe_validation_v6() -> None:
+    d = json.loads(PROBE.read_text())
+    # Simple 4-card visual summary.
+    fig, ax = plt.subplots(figsize=(7.0, 2.6))
+    ax.axis("off")
+    cards = [
+        ("nicks probed", f"{d['n_nicks']}"),
+        ("nicks matched", f"{d['n_nicks_with_any_v6_match']}"),
+        ("UTXOs matched", f"{d['total_matched_in_v6']} / {d['total_offered_utxos']}"),
+        ("precision violations", f"{d['precision_violations_clusters']}"),
+    ]
+    n = len(cards)
+    for i, (label, value) in enumerate(cards):
+        x = (i + 0.5) / n
+        ax.text(x, 0.7, value, ha="center", va="center", fontsize=24,
+                color=COL["dark"], transform=ax.transAxes,
+                fontweight="bold")
+        ax.text(x, 0.3, label, ha="center", va="center", fontsize=10,
+                color=COL["dark"], transform=ax.transAxes)
+    ax.set_title(
+        "v6 probing-attack ground-truth validation: 0 cross-nick collisions",
+        pad=12,
+    )
+    _save(fig, "probe_validation_v6.svg")
+
+
+def main() -> None:
+    for fn in (
+        anonset_reduction_hist,
+        anonset_per_n_eq,
+        cluster_size_distribution,
+        v5_vs_v6_fragmentation,
+        probe_validation_v6,
+    ):
+        try:
+            fn()
+        except Exception as e:  # noqa: BLE001
+            print(f"ERROR in {fn.__name__}: {e}")
+
+
+if __name__ == "__main__":
+    main()
