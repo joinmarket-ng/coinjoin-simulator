@@ -5,30 +5,41 @@
 > **TL;DR.** JoinMarket is a Bitcoin CoinJoin protocol where a
 > *taker* pays a small fee to one or more *makers* to mix coins
 > into a single transaction with several equal-value outputs;
-> each maker's equal output is supposed to be indistinguishable
-> from the taker's. We ran a passive on-chain experiment on the
-> last few years of mainnet JoinMarket activity (16,890
-> ILP-decoded CoinJoins) and clustered maker wallets using only
-> protocol-forced signals: the JoinMarket mixdepth state machine
-> (a maker's change stays in the source mixdepth and its equal
-> output advances to the next, and the maker tends to re-advertise
-> from whichever mixdepth holds the most coins), the Common Input
-> Ownership Heuristic on non-CoinJoin maker spends recovered with
-> ILP, and the maker's published fee schedule used as a
-> per-CoinJoin disambiguator. A simple example of that last
-> signal: if a maker charges 0.1% in one CJ and an equal output of
-> that CJ then participates in a later CJ whose ILP-recovered
-> slot also charges 0.1% (and no other maker in the producer CJ
-> charges 0.1% at that amount), the two slots are the same maker.
-> Sometimes a participant acts as taker in one round and maker in
-> the next, which lets the same edge pull the taker's equal
-> output into a maker cluster. The result is uncomfortable: the
-> mean published anonymity set for a CJ in this corpus is 8.66
-> equal outputs, but after removing certified makers it drops to
-> 3.71, and on 10.8% of CJs only the taker remains. The good news
-> is that practical mitigations exist (we discuss them in §9), and
-> none of the steps in this attack are probabilistic: every merge
-> is a hard same-wallet conclusion or no merge at all.
+> every equal output is supposed to be indistinguishable from
+> every other equal output in the same round (makers want
+> anonymity from each other and from the taker, just as the taker
+> wants anonymity from the makers). We ran a passive on-chain
+> experiment on exactly one year of mainnet JoinMarket activity
+> (16,890 ILP-decoded CoinJoins) and clustered maker wallets
+> using only protocol-forced signals: the JoinMarket mixdepth
+> state machine (a maker's change stays in the source mixdepth
+> and its equal output advances to the next, and the maker
+> chooses the mixdepth with the highest balance to re-advertise),
+> the integer-linear-program (ILP) recovery of slot membership
+> (which inputs and change output belong to the same participant)
+> inside each CoinJoin so that the Common Input Ownership
+> Heuristic (CIOH) can be applied across the on-CJ and off-CJ
+> sides of a maker wallet, and the maker's published fee
+> schedule used as a per-CoinJoin disambiguator. A simple example
+> of that last signal: if a maker charges 0.1% in one CJ and an
+> equal output of that CJ then participates in a later CJ whose
+> ILP-recovered slot also charges 0.1% (and no other maker in
+> the producer CJ charges 0.1% at that amount), the two slots
+> are the same maker. Sometimes a participant acts as taker in
+> one round and maker in the next, which lets the same edge
+> pull the taker's equal output into a maker cluster. The
+> result is uncomfortable: the mean published anonymity set for
+> a CJ in this corpus is 8.66 equal outputs, but after removing
+> the equal outputs of makers we successfully clustered the
+> residual drops to 3.71, and on 10.8% of CJs only the taker
+> remains. None of the edges in this attack are probabilistic:
+> every merge is a hard same-wallet conclusion or no merge at
+> all. This is not good news. It demonstrates that the gap
+> between JoinMarket's published per-round anonymity set and the
+> set a passive on-chain analyst actually faces is structural,
+> deterministic, and reproducible from the public chain plus the
+> orderbook snapshot. Practical mitigations exist; we discuss
+> them in \u00a79.
 
 ## 1. Scope and motivation
 
@@ -56,18 +67,20 @@ JoinMarket defends this set in several layered ways:
   the same mixdepth as the inputs, and JoinMarket clients refuse
   to co-spend UTXOs across mixdepths). Outputs from different
   mixdepths of the same wallet are therefore never co-spent
-  without an off-chain consolidation. The same mixdepth
-  separation protects the taker as much as the maker: the
-  protections in this paper apply to anyone who reuses a
-  JoinMarket wallet across roles.
+  inside the wallet without an explicit consolidation step in
+  the client.
 - Each maker advertises offers on the JoinMarket directory-server
   overlay. Today the overlay is a small set of directory nodes
   that relay (often end-to-end encrypted) Tor messages between
   participants; earlier versions used IRC. Nicks are randomised
-  per session, but every offer is anchored to a *fidelity bond*
-  (FB): a timelocked P2WSH UTXO the maker proves they control.
-  The FB is the only durable label a passive observer sees, and
-  the orderbook publishes it in cleartext.
+  per session, and offers can be advertised either with or
+  without a fidelity bond. A *fidelity bond* (FB) is a timelocked
+  P2WSH UTXO the maker proves they control; bondless offers can
+  be advertised freely and are therefore trivially Sybil-able,
+  so takers in practice almost always select bonded makers (the
+  taker selection algorithm weights by bond value). The FB is
+  the only durable label a passive observer sees, and the
+  orderbook publishes it in cleartext.
 - The taker's identity at round $T$ does not, by itself, leak
   which of the $n_{eq}$ equal outputs it owns.
 
@@ -114,10 +127,14 @@ probing campaign in late April 2026 (three rounds, 72 maker nicks,
 described in §6.2) that contributed seed addresses to the corpus
 crawl and is reused as a ground-truth oracle in §6. The probing
 was done in good faith, at the smallest size that still gives a
-useful precision check, and the maker-UTXO values and addresses
-have been zeroed in the published probe data so that only the
-outpoint identifiers needed for the precision check survive. The
-probing data contributes nothing to the clustering itself.
+useful precision check. To avoid republishing privacy-sensitive
+on-chain identifiers, the probe artefacts kept in this
+repository are reduced to per-nick advertised-UTXO *counts* and
+the precision-check outcomes (matched-nick set, cross-nick
+collision counts); we deliberately do not publish the maker
+outpoints, amounts, addresses, or fidelity-bond UTXOs collected
+during probing. The probing data contributes nothing to the
+clustering itself.
 
 ## 3. JoinMarket protocol primer
 
@@ -255,12 +272,14 @@ outputs concludes the producer slot was $A$.
 
 A forward and backward crawl seeded from probe-collected
 addresses, walking only outspends from already-classified
-JoinMarket CoinJoins, produced the snapshot used here:
+JoinMarket CoinJoins, produced the snapshot used here. It spans
+exactly one year of mainnet JoinMarket activity:
 
 | metric                | count        |
 |-----------------------|-------------:|
 | visited transactions  | ~200,000     |
 | **JM CoinJoin txs**   | **23,876**   |
+| time span             | 1 year (2025-05-22 to 2026-05-22) |
 | ILP-decoded CJs       | 16,890 (70.7%) |
 | ILP failures (timeout / infeasible at `max_fee_rel = 0.05`, `time_limit = 2s`) | 6,986 (29.3%) |
 | maker slots recovered | 129,301      |
@@ -624,9 +643,18 @@ to a passive observer (cold storage, exchange withdrawal, a
 separate fresh wallet). This is the privacy-preserving funding
 pattern: the FB owner spends external coins to create the bond
 and avoids tying the bond key to any prior on-chain JM activity.
-The 17 mixed and 10 JM-input funding txs are the ones that *do*
-leak a same-wallet edge to a v7.2 maker slot, and they produce
-the 17 backward-via-change anchors that v7.3 acts on.
+A natural follow-up question is whether a one-hop CIOH check
+understates the leak (the funding tx might still trace back to
+JM coins one or two hops earlier). We did not extend the walk
+beyond the immediate funding tx in this paper. A multi-hop
+backward CIOH walk over non-CJ ancestors is a natural extension
+and is listed in §10 as future work; on the present snapshot
+69% of FBs cleanly fund from one-hop-external wallets, but the
+true privacy-preserving share could be smaller once deeper
+walks are folded in. The 17 mixed and 10 JM-input funding txs
+are the ones that *do* leak a same-wallet edge to a v7.2 maker
+slot at one hop, and they produce the 17 backward-via-change
+anchors that v7.3 acts on.
 
 Safety guards. v7.3 has two precision-protecting filters:
 
@@ -1025,11 +1053,12 @@ same-mixdepth change UTXO that a maker returns to in the next
 round (the change-chain edge of §5 fact 2), (ii) the per-slot
 realised fee that distinguishes one maker's offer from another
 within a single producer CJ (the fee-fingerprint of §5.2), and
-(iii) the off-chain consolidation transactions that link change
-UTXOs across rounds under the CIOH-safety filter (§5.3, §5.4).
-The fidelity-bond funding edge of §5.5 is a fourth, weaker
-channel. A countermeasure is meaningful only if it disrupts the
-structural artefact, not the local symptom.
+(iii) the non-CoinJoin spends in which a maker consolidates or
+externally pays from one or more of its UTXOs, which the CIOH
+filter walks under the conservative ≤2-output safety rule (§5.3,
+§5.4). The fidelity-bond funding edge of §5.5 is a fourth,
+weaker channel. A countermeasure is meaningful only if it
+disrupts the structural artefact, not the local symptom.
 
 ### 9.1 Within current JoinMarket
 
@@ -1042,22 +1071,45 @@ smallest:
    producer CJ almost always advertise *distinct* fees, so a
    consumer slot's fee in the next CJ usually selects exactly
    one producer slot. If a sufficient share of makers ran the
-   same fee policy (e.g., the default $\mathit{cjfee}_r = 0.0001$
-   with $\mathit{cjfee}_a = 0$), most producer CJs would have
-   $\geq 2$ slots that match any given fee fingerprint and v7
-   would record those reuses as ambiguous (the dropped-on-purpose
-   85% no-match plus 3.9% ambiguous shares in §5.2). The §6.1
-   simulator can be re-run with a uniform-fee maker population
-   to put a number on this. As long as fees are heterogeneous
-   *per CJ*, v7's edge stays sharp.
+   *same* fee policy, most producer CJs would have $\geq 2$
+   slots that match any given fee fingerprint and v7 would
+   record those reuses as ambiguous (the dropped-on-purpose
+   85% no-match plus 3.9% ambiguous shares in §5.2). The
+   realistic version of this is not "everyone advertises zero
+   abs fee, zero rel fee" (takers always pick the cheapest
+   offer, so a free-for-everyone equilibrium is not a stable
+   one for the maker side either): rather, it is "default
+   offer settings, advertised honestly". The reference client's
+   default $\mathit{cjfee}_r = 0.0001$ (with a non-zero
+   $\mathit{cjfee}_a$ chosen to cover the maker's expected
+   on-chain cost at typical round sizes) and the JoinMarket-NG
+   *dual-offer* convention (advertise an absolute fee that
+   dominates at small amounts and a relative fee that takes
+   over above a per-maker threshold) both compress the
+   fingerprint space when most makers adopt them. The §6.1
+   simulator's uniform regime puts a number on the limiting
+   case: with a single policy across all makers v7 records
+   *zero* cross-CJ reuses and falls back to v6 plus §5.4. As
+   long as fees stay heterogeneous *per CJ*, v7's edge stays
+   sharp; the practical recommendation is therefore for the
+   reference client to ship a small number of well-known
+   default policies (rather than encouraging each maker to
+   tune their own) and to lower the per-CJ variance of the
+   advertised-fee distribution.
 2. **Disjoint fidelity-bond wallet.** 66 of 95 FBs in our
    snapshot are already funded from inputs with no observable JM
    provenance (§5.5). The remaining 29 leak a backward CIOH
    anchor that ties the FB owner's nick to one or more maker
    slots. A maker who funds the FB exclusively from a wallet
    that never receives JM equal outputs or change closes this
-   channel entirely; this is the privacy-preserving funding
-   pattern the majority of makers already practise.
+   one channel. We rank this lower than (1) and (3) on impact:
+   in a fee-heterogeneous orderbook the same nick is likely to
+   be reidentifiable from its unique (fee, bond-value) signature
+   and from §5.4 non-CJ CIOH anyway, so the FB-funding edge is
+   most valuable to defenders when other identifying signals
+   are already homogenised (item 1 below). It is, however, a
+   one-shot low-cost hygiene step that closes one independent
+   edge and is therefore worth following regardless.
 3. **Avoid two-output non-CJ spends that consume maker change.**
    The v7.1 and v7.2 edges only fire on non-CJ spenders of at
    most two outputs, because that is the only non-CJ shape where
@@ -1248,7 +1300,7 @@ the attack exploits, namely that JoinMarket's two same-wallet
 UTXO chains (the change-chain at the same mixdepth and the
 equal-output chain at the next mixdepth, the latter disambiguated
 by the maker's own fee schedule) combined with conservative
-non-CJ CIOH on the maker's off-chain consolidations, are all
+non-CJ CIOH on the maker's other on-chain spends, are all
 intrinsic to the protocol and to the typical maker wallet
 workflow; they are not a fixable implementation bug.
 
