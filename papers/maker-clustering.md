@@ -529,42 +529,80 @@ ignored.
 ### 5.5 v7.3: fidelity-bond funding-tx CIOH
 
 JoinMarket makers advertise a *fidelity bond* (FB): a timelocked
-P2WSH output that the maker proves they own. The set of live FB
-UTXOs and the nick that owns each one is published, in cleartext,
-on the orderbook directory nodes; any passive observer can pull a
-snapshot. The bond UTXO itself is timelocked and almost never
-spent in our corpus, but the transaction that *created* the bond
-output is regular (non-CJ) and its inputs are same-wallet as the
-FB owner by the standard common-input ownership heuristic (CIOH).
+P2WSH output that the maker proves they own. The orderbook
+directory nodes publish, in cleartext, the nick to FB-UTXO
+mapping; any passive observer can pull a snapshot. The bond UTXO
+itself is timelocked and almost never spent in our corpus, but
+the transaction $F$ that *created* it is a regular spend whose
+inputs are same-wallet as the FB owner by the common-input
+ownership heuristic (CIOH).
 
 v7.3 turns the public orderbook into two new same-wallet edges
-over the maker slots already clustered by v7.2:
+over the v7.2 maker-slot graph:
 
-* **Backward FB-funding CIOH.** Let nick `N` own FB UTXO `(F,
-  v_FB)`. Every input outpoint of `F` is same-wallet as `N`. If
-  any such input equals the *change output* of a maker slot `s`
-  (i.e., `s`'s change was consumed when `N`'s wallet funded its
-  bond), then `s` belongs to `N`'s wallet.
-* **Strict forward FB-funding sibling.** If `F` has at most two
-  outputs, the non-FB output is change of `N`. If that change
-  outpoint is later consumed as a maker-slot input `s'`, then
-  `s'` is in `N`'s wallet.
+* **Backward FB-funding CIOH.** Let nick $N$ own FB UTXO $(F,
+  v_{FB})$. Every input outpoint of $F$ is same-wallet as $N$.
+  If any such input equals the change output of a maker slot $s$
+  in the v7.2 graph (i.e., $s$'s change was consumed when $N$'s
+  wallet funded its bond), then $s$ belongs to $N$'s wallet.
+* **Strict forward FB-funding sibling.** If $F$ has at most two
+  outputs, the non-FB output is change of $N$'s wallet. If that
+  change outpoint is later consumed as a maker-slot input $s'$,
+  then $s'$ is in $N$'s wallet.
 
 Two slots anchored to the same nick are then unioned, subject to
 the same-CJ forbid-set inherited from v6.
 
-Safety guards. v7.3 has three precision-protecting filters:
+How are FBs funded in practice? We classified the inputs of every
+FB-funding tx in our snapshot against (i) whether the funding tx
+is itself a JM CJ, and (ii) whether the inputs reuse known JM
+outputs (equal outputs or maker change):
 
-1. **JM CoinJoin exclusion.** If the funding tx `F` is itself a
-   known JoinMarket CoinJoin, CIOH on `F` is unsound and the
-   anchor is dropped. On our corpus two of 95 FB-funding txs are
-   CJs and are skipped.
+| funding-tx class                                       | count |
+|--------------------------------------------------------|------:|
+| funding tx is itself a JM CJ                           |     2 |
+| funded entirely from inputs with no observable JM provenance | 66 |
+| funded from a mix of external and JM-derived inputs    |    17 |
+| funded from one or more inputs that are themselves JM-CJ outputs (but not classified as equal or change in our slot table) | 10 |
+| total FBs in orderbook snapshot (2026-05-22)           |    95 |
+
+The headline observation is structural: 66 of 95 FBs (69%) are
+funded from inputs with **no observable JoinMarket provenance**.
+Their funding wallets look like ordinary external Bitcoin wallets
+to a passive observer (cold storage, exchange withdrawal, a
+separate fresh wallet). This is the privacy-preserving funding
+pattern: the FB owner spends external coins to create the bond
+and avoids tying the bond key to any prior on-chain JM activity.
+The 17 mixed and 10 JM-input funding txs are the ones that *do*
+leak a same-wallet edge to a v7.2 maker slot, and they produce
+the 17 backward-via-change anchors that v7.3 acts on.
+
+Safety guards. v7.3 has two precision-protecting filters:
+
+1. **JM CoinJoin exclusion with taker-eq-out re-examination.**
+   The default rule excludes any funding tx $F$ that is itself a
+   known JM CJ, because in a CJ the inputs do *not* all share
+   one wallet. On our corpus two of 95 FB-funding txs fall under
+   this rule. We re-examined both: in one case the FB-owner slot
+   is identifiable because exactly one slot of $F$ pays an
+   outlier fee (8,556,774 sats out of 8,562,887 total fees paid,
+   which is the taker contribution), so the FB owner is that
+   taker slot and CIOH applied to its inputs alone would be
+   sound. In the other case ($n_{eq} = 13$ all at value
+   946,399 sats, no outlier-fee slot), the taker slot cannot be
+   isolated from the maker slots and the FB owner cannot be
+   identified. We do *not* add either anchor: the gain from the
+   identifiable case (one slot, one input UTXO) is below the
+   threshold at which we are willing to add a special-case rule,
+   and we report the analysis so that future iterations can
+   decide whether to include the outlier-fee-slot variant.
+   Restricting CIOH to a single slot's inputs (the *taker-equal-
+   output* discard) is the structurally correct generalisation
+   for any CJ-shaped funding tx: only the slot whose equal output
+   funds the bond contributes inputs to the FB owner's wallet.
 2. **Same-CJ forbid.** Two slots anchored to the same nick that
    happen to sit in the same CJ would be a hard precision
    violation; they are dropped by the constrained union-find.
-3. **Cluster-nick conflict abstain.** If two distinct FB nicks
-   anchor the same v7.2 cluster, neither nick's anchors are
-   applied (zero on our corpus, but the rule is in place).
 
 Empirically on the mainnet corpus (orderbook snapshot of
 2026-05-22, 95 FB UTXOs, funding txs fetched from a public
@@ -579,8 +617,7 @@ indexer):
 | backward anchors via maker-slot input               |     0 |
 | strict-forward anchors                              |     1 |
 | nicks with at least one anchor                      |    13 |
-| nicks spanning >=2 v7.2 clusters (merge candidates) |     4 |
-| cluster-nick conflicts                              |     0 |
+| nicks spanning $\geq 2$ v7.2 clusters (merge candidates) |     4 |
 | candidate slot pairs                                |     6 |
 | same-CJ pairs rejected                              |     0 |
 | **cross-cluster unions added**                      | **6** |
