@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
   "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="412.99875pt" height="179.662125pt" viewBox="0 0 412.99875 179.662125" xmlns="http://www.w3.org/2000/svg" version="1.1">
+<svg xmlns:xlink="http://www.w3.org/1999/xlink" width="438.48pt" height="190.750125pt" viewBox="0 0 438.48 190.750125" xmlns="http://www.w3.org/2000/svg" version="1.1">
  <metadata>
   <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
-    <dc:date>2026-05-23T11:05:22.452143</dc:date>
+    <dc:date>2026-05-23T11:49:39.422771</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
@@ -21,9 +21,9 @@
  </defs>
  <g id="figure_1">
   <g id="patch_1">
-   <path d="M 0 179.662125 
-L 412.99875 179.662125 
-L 412.99875 0 
+   <path d="M 0 190.750125 
+L 438.48 190.750125 
+L 438.48 0 
 L 0 0 
 z
 " style="fill: #ffffff"/>
@@ -31,7 +31,7 @@ z
   <g id="axes_1">
    <g id="text_1">
     <!-- 72 -->
-    <g style="fill: #222222" transform="translate(43.325625 78.183825) scale(0.24 -0.24)">
+    <g style="fill: #222222" transform="translate(43.51125 81.510225) scale(0.24 -0.24)">
      <defs>
       <path id="DejaVuSans-Bold-37" d="M 428 4666 
 L 3944 4666 
@@ -72,7 +72,7 @@ z
    </g>
    <g id="text_2">
     <!-- nicks probed -->
-    <g style="fill: #222222" transform="translate(28.026719 131.9783) scale(0.1 -0.1)">
+    <g style="fill: #222222" transform="translate(28.212344 139.7399) scale(0.1 -0.1)">
      <defs>
       <path id="DejaVuSans-6e" d="M 3513 2113 
 L 3513 0 
@@ -331,7 +331,7 @@ z
    </g>
    <g id="text_3">
     <!-- 35 -->
-    <g style="fill: #222222" transform="translate(140.975625 78.183825) scale(0.24 -0.24)">
+    <g style="fill: #222222" transform="translate(149.53125 81.510225) scale(0.24 -0.24)">
      <defs>
       <path id="DejaVuSans-Bold-33" d="M 2981 2516 
 Q 3453 2394 3698 2092 
@@ -397,7 +397,7 @@ z
    </g>
    <g id="text_4">
     <!-- nicks matched -->
-    <g style="fill: #222222" transform="translate(121.215 131.9783) scale(0.1 -0.1)">
+    <g style="fill: #222222" transform="translate(129.770625 139.7399) scale(0.1 -0.1)">
      <defs>
       <path id="DejaVuSans-6d" d="M 3328 2828 
 Q 3544 3216 3844 3400 
@@ -520,7 +520,7 @@ z
    </g>
    <g id="text_5">
     <!-- 40 / 101 -->
-    <g style="fill: #222222" transform="translate(200.83875 78.183825) scale(0.24 -0.24)">
+    <g style="fill: #222222" transform="translate(226.845313 80.406475) scale(0.2 -0.2)">
      <defs>
       <path id="DejaVuSans-Bold-34" d="M 2356 3675 
 L 1038 1722 
@@ -597,7 +597,7 @@ z
    </g>
    <g id="text_6">
     <!-- UTXOs matched -->
-    <g style="fill: #222222" transform="translate(215.311875 131.9783) scale(0.1 -0.1)">
+    <g style="fill: #222222" transform="translate(232.2375 139.7399) scale(0.1 -0.1)">
      <defs>
       <path id="DejaVuSans-55" d="M 556 4666 
 L 1191 4666 
@@ -681,13 +681,13 @@ z
    </g>
    <g id="text_7">
     <!-- 0 -->
-    <g style="fill: #222222" transform="translate(344.625 78.183825) scale(0.24 -0.24)">
+    <g style="fill: #222222" transform="translate(369.920625 81.510225) scale(0.24 -0.24)">
      <use xlink:href="#DejaVuSans-Bold-30"/>
     </g>
    </g>
    <g id="text_8">
     <!-- precision violations -->
-    <g style="fill: #222222" transform="translate(304.788437 131.9783) scale(0.1 -0.1)">
+    <g style="fill: #222222" transform="translate(330.084062 139.7399) scale(0.1 -0.1)">
      <defs>
       <path id="DejaVuSans-76" d="M 191 3500 
 L 800 3500 
@@ -731,7 +731,7 @@ z
    </g>
    <g id="text_9">
     <!-- v7.3 probing-attack ground-truth validation: 0 cross-nick collisions -->
-    <g transform="translate(7.2 16.318125) scale(0.12 -0.12)">
+    <g transform="translate(19.940625 16.318125) scale(0.12 -0.12)">
      <defs>
       <path id="DejaVuSans-37" d="M 525 4666 
 L 3525 4666 

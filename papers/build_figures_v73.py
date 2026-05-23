@@ -227,10 +227,11 @@ def v5_vs_v6_fragmentation() -> None:
     rows.sort(key=lambda r: -r["v5_size"])
     labels = [f"v5#{r['v5_cluster_id']}\n({r['v5_size']:,} UTXOs)" for r in rows]
     n_v6 = [r["n_distinct_v6_clusters"] for r in rows]
-    fig, ax = plt.subplots(figsize=(8.0, 4.0))
+    fig, ax = plt.subplots(figsize=(8.0, 4.4))
     bars = ax.bar(range(len(rows)), n_v6, color=COL["wine"], edgecolor=COL["dark"])
     ax.set_xticks(range(len(rows)))
-    ax.set_xticklabels(labels, fontsize=8, rotation=0)
+    ax.set_xticklabels(labels, fontsize=8, rotation=30, ha="right")
+    fig.subplots_adjust(bottom=0.22)
     ax.set_ylabel("distinct v6/v7 clusters")
     ax.set_title(
         "v5 over-clustering: top-12 v5 fee-band clusters decomposed by v6/v7",
@@ -249,16 +250,20 @@ def v5_vs_v6_fragmentation() -> None:
 
 def probe_validation_v7() -> None:
     d = json.loads(PROBE.read_text())
-    fig, ax = plt.subplots(figsize=(7.0, 2.6))
+    fig, ax = plt.subplots(figsize=(7.6, 2.8))
     ax.axis("off")
     cards = [
-        ("nicks probed", f"{d['n_nicks']}"),
-        ("nicks matched", f"{d['n_nicks_with_any_v73_match']}"),
-        ("UTXOs matched", f"{d['total_matched_in_v73']} / {d['total_offered_utxos']}"),
-        ("precision violations", f"{d['precision_violations_clusters']}"),
+        ("nicks probed", f"{d['n_nicks']}", 24),
+        ("nicks matched", f"{d['n_nicks_with_any_v73_match']}", 24),
+        (
+            "UTXOs matched",
+            f"{d['total_matched_in_v73']} / {d['total_offered_utxos']}",
+            20,
+        ),
+        ("precision violations", f"{d['precision_violations_clusters']}", 24),
     ]
     n = len(cards)
-    for i, (label, value) in enumerate(cards):
+    for i, (label, value, fs) in enumerate(cards):
         x = (i + 0.5) / n
         ax.text(
             x,
@@ -266,7 +271,7 @@ def probe_validation_v7() -> None:
             value,
             ha="center",
             va="center",
-            fontsize=24,
+            fontsize=fs,
             color=COL["dark"],
             transform=ax.transAxes,
             fontweight="bold",
@@ -322,9 +327,13 @@ def v7_attribution_breakdown() -> None:
             fontsize=9,
         )
     ax.set_yscale("log")
-    # Sub-breakdown of unique_either.
+    # Headroom so the top-bar value label is visible.
+    top = max(values)
+    ax.set_ylim(top=top * 3)
+    # Sub-breakdown of unique_either, placed in the upper-left where the
+    # 'edge added' bar leaves space (avoids covering the tallest bar label).
     ax.text(
-        0.98,
+        0.02,
         0.95,
         (
             f"of 'edge added' ({keep:,}):\n"
@@ -333,7 +342,7 @@ def v7_attribution_breakdown() -> None:
             f"  both agree: {a['unique_both_same_slot']:,}"
         ),
         transform=ax.transAxes,
-        ha="right",
+        ha="left",
         va="top",
         fontsize=8,
         family="monospace",
