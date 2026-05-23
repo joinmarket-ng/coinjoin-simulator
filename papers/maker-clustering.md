@@ -1,59 +1,85 @@
 # JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
 
-> **TL;DR.** On 16,890 ILP-decoded mainnet JoinMarket CoinJoins,
-> a passive on-chain clusterer that follows protocol-mandated
-> same-wallet UTXO edges at precision = 1.0 recovers 68,998 maker
-> wallet components. The taker's per-CJ published anonymity set
-> shrinks from a mean of **8.66 equal outputs to 3.71**, and 98.0%
-> of CJs lose at least one candidate. Three independent
-> ground-truth checks (simulator ARI = 1.0, zero within-CJ
-> collisions, zero cross-nick collisions vs 72 actively-probed
-> maker nicks across 40 matched UTXOs) confirm no over-merging.
-> The clusterer combines five protocol-mandated edges: a
-> change-output reuse edge (v6), a fee-fingerprint disambiguated
-> equal-output reuse edge (v7), a non-CJ co-spend edge on
-> two-output spenders of maker change (v7.1), a non-CJ
-> round-trip edge that links a maker's change UTXO to a future
-> maker-slot input through a single two-output hop (v7.2), and a
-> fidelity-bond funding-tx CIOH edge anchored at the public
-> orderbook snapshot (v7.3). The latest module ships at
-> [`src/coinjoin_simulator/clusterer_v73.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v73.py).
+# JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
+
+> **TL;DR.** JoinMarket is a Bitcoin CoinJoin protocol where a
+> *taker* pays a small fee to one or more *makers* to mix coins
+> into a single transaction with several equal-value outputs;
+> each maker's equal output is supposed to be indistinguishable
+> from the taker's. We ran a passive on-chain experiment on the
+> last few years of mainnet JoinMarket activity (16,890
+> ILP-decoded CoinJoins) and clustered maker wallets using only
+> protocol-forced signals: the JoinMarket mixdepth state machine
+> (a maker's change stays in the source mixdepth and its equal
+> output advances to the next, and the maker tends to re-advertise
+> from whichever mixdepth holds the most coins), the Common Input
+> Ownership Heuristic on non-CoinJoin maker spends recovered with
+> ILP, and the maker's published fee schedule used as a
+> per-CoinJoin disambiguator. A simple example of that last
+> signal: if a maker charges 0.1% in one CJ and an equal output of
+> that CJ then participates in a later CJ whose ILP-recovered
+> slot also charges 0.1% (and no other maker in the producer CJ
+> charges 0.1% at that amount), the two slots are the same maker.
+> Sometimes a participant acts as taker in one round and maker in
+> the next, which lets the same edge pull the taker's equal
+> output into a maker cluster. The result is uncomfortable: the
+> mean published anonymity set for a CJ in this corpus is 8.66
+> equal outputs, but after removing certified makers it drops to
+> 3.71, and on 10.8% of CJs only the taker remains. The good news
+> is that practical mitigations exist (we discuss them in §9), and
+> none of the steps in this attack are probabilistic: every merge
+> is a hard same-wallet conclusion or no merge at all.
 
 ## 1. Scope and motivation
 
 A JoinMarket CoinJoin (CJ) is an atomic transaction in which one
-*taker* and `m` *makers* contribute inputs and produce `n = m + 1`
-equal-amount outputs (the *equal outputs*) plus up to `n` change
-outputs (one per participant who needs change; typically all `m`
-makers and usually the taker too). The published anonymity
-property is that the taker's equal output is indistinguishable
-from the makers' equal outputs: the taker hides in a set of `n`
-candidates per round.
+*taker* and $M$ *makers* contribute inputs and produce
+$n_{eq} = M + 1$ equal-amount outputs (the *equal outputs*) plus
+up to $n_{eq}$ change outputs (one per participant who needs
+change; typically all $M$ makers and usually the taker too). Each
+participant contributes one *slot*: a bundle of one or more
+inputs they own, exactly one equal-amount output, and at most one
+change output. The published anonymity property is that the
+taker's equal output is indistinguishable from the makers' equal
+outputs: the taker hides in a set of $n_{eq}$ candidates per
+round.
 
 JoinMarket defends this set in several layered ways:
 
-- Each maker keeps funds in five separate *mixdepths*. A single
-  CJ uses inputs from one mixdepth only, the equal output goes to
-  mixdepth `m + 1 (mod 5)` of the same wallet (the equal output
-  is the part that gained privacy and gets to advance), and the
-  change output stays at mixdepth `m` (it carries the original
-  identity link, so it does not move). Outputs from different
-  mixdepths of the same wallet are never co-spent.
-- Maker offers are announced over a Tor IRC overlay; the on-chain
-  observer cannot tie nicks to UTXOs without active probing.
-- The taker's identity at round T does not, by itself, leak which
-  of the `n` equal outputs it owns.
+- Both makers and takers run the same wallet software and keep
+  funds in five separate *mixdepths* (numbered $d \in
+  \{0, 1, 2, 3, 4\}$). A single slot uses inputs from one
+  mixdepth only; the equal output goes to mixdepth
+  $d{+}1 \bmod 5$ of the same wallet (the equal output is the
+  part that gained privacy and gets to advance); the change
+  output stays at mixdepth $d$ (its address derivation belongs to
+  the same mixdepth as the inputs, and JoinMarket clients refuse
+  to co-spend UTXOs across mixdepths). Outputs from different
+  mixdepths of the same wallet are therefore never co-spent
+  without an off-chain consolidation. The same mixdepth
+  separation protects the taker as much as the maker: the
+  protections in this paper apply to anyone who reuses a
+  JoinMarket wallet across roles.
+- Each maker advertises offers on the JoinMarket directory-server
+  overlay. Today the overlay is a small set of directory nodes
+  that relay (often end-to-end encrypted) Tor messages between
+  participants; earlier versions used IRC. Nicks are randomised
+  per session, but every offer is anchored to a *fidelity bond*
+  (FB): a timelocked P2WSH UTXO the maker proves they control.
+  The FB is the only durable label a passive observer sees, and
+  the orderbook publishes it in cleartext.
+- The taker's identity at round $T$ does not, by itself, leak
+  which of the $n_{eq}$ equal outputs it owns.
 
 This paper studies what the same passive adversary *can* still
 learn from on-chain data. The central observation is that a maker
 who participates in two CJs leaves a deterministic same-wallet
-UTXO edge in the chain: either an equal output of CJ T (at
-mixdepth `m + 1`) reused as a maker input in CJ S (the maker
-later advertising mixdepth `m + 1`), or a change output of T (at
-mixdepth `m`) reused later when the maker cycles back to
-advertising `m`. Following those edges clusters the maker
-wallets, and every clustered maker shrinks the taker's hide-set
-by one.
+UTXO edge in the chain: either an equal output of CJ $T$ (at
+mixdepth $d{+}1$) reused as a maker input in CJ $S$ (the maker
+later advertising mixdepth $d{+}1$), or a change output of $T$
+(at mixdepth $d$) reused later when the maker advertises $d$
+again. Following those edges clusters the maker wallets, and
+every clustered maker shrinks the taker's hide-set by one.
 
 This paper answers:
 
@@ -66,19 +92,16 @@ This paper answers:
    independent ground-truth source (an active probing campaign
    that collects real maker UTXO-to-nick bindings)?
 
-The simulator, the on-chain clusterer, and the analysis driver
-are open source at
-[joinmarket-ng](https://github.com/joinmarket-ng/joinmarket-ng)
-and
-[coinjoin-simulator](https://github.com/joinmarket-ng/coinjoin-simulator).
-
 ## 2. Threat model
 
 Passive on-chain adversary with full corpus access:
 
 - a snapshot of every JoinMarket CoinJoin reachable by a forward
-  and backward crawl seeded from probe-collected addresses
-  (23,876 JM-flagged CJs in the corpus);
+  and backward crawl seeded from probe-collected addresses. The
+  crawl covers the public mainnet history through May 2026 and
+  finds 23,876 JM-flagged CJs going back to mid-2021, though the
+  density is heavily skewed to the last ~14 months (75% of the
+  decoded CJs sit in 2025-04 onward);
 - the public orderbook
   ([joinmarket-ng.sgn.space/orderbook.json](https://joinmarket-ng.sgn.space/orderbook.json));
 - the ability to solve a CJ-sized ILP (less than 30 inputs);
@@ -86,41 +109,58 @@ Passive on-chain adversary with full corpus access:
   under 15 minutes on 14 cores).
 
 The adversary does *not* participate in any CoinJoin and is not
-assumed to control any maker. An off-chain probing campaign
-contributed seed addresses to the corpus crawl and is reused as
-ground truth in §6 but contributes nothing to the clustering
-itself.
+assumed to control any maker. We did run a small off-chain
+probing campaign in late April 2026 (three rounds, 72 maker nicks,
+described in §6.2) that contributed seed addresses to the corpus
+crawl and is reused as a ground-truth oracle in §6. The probing
+was done in good faith, at the smallest size that still gives a
+useful precision check, and the maker-UTXO values and addresses
+have been zeroed in the published probe data so that only the
+outpoint identifiers needed for the precision check survive. The
+probing data contributes nothing to the clustering itself.
 
 ## 3. JoinMarket protocol primer
 
 Three protocol facts are load-bearing for the clusterer:
 
 1. **Per-CJ slot uniqueness.** Each participant (taker or maker)
-   contributes one *slot*: a bundle of one or more inputs
-   (possibly several UTXOs to cover the offered amount), exactly
-   one equal-amount output, and at most one change output. A
-   maker who runs as two distinct nicks in the same CJ would have
-   to self-pay fees and would be deduplicated by takers on the
-   fidelity-bond UTXO during offer selection, so two slots in the
-   same CJ belong to two different wallets in practice.
+   contributes exactly one slot. A slot may aggregate several
+   UTXOs to cover the offered amount, but it always produces one
+   equal-amount output and at most one change output, all in the
+   same mixdepth.
 
-2. **Same-mixdepth change.** A slot whose inputs come from
-   mixdepth `m` lands its change output back in mixdepth `m`.
-   That change UTXO is therefore eligible to be a future input of
-   the *same maker* whenever the maker next advertises mixdepth
-   `m`.
+2. **Same-mixdepth change (sticky change).** A slot whose inputs
+   come from mixdepth $d$ lands its change output back in
+   mixdepth $d$. This is enforced by the wallet (the change
+   address is derived from the same mixdepth's key tree), so the
+   change UTXO is eligible to be a future input of the *same
+   maker* whenever the maker next advertises mixdepth $d$. The
+   downstream consequence is what makes the change-chain edge so
+   sharp: if some later CJ slot in our corpus has inputs whose
+   ILP-selected combination *exactly* matches this change UTXO
+   (typically as one of several inputs in a subset-sum
+   decomposition), the two slots are the same wallet by
+   construction.
 
 3. **Mixdepth-advancing equal output.** The slot's equal output
-   lands in mixdepth `m + 1 (mod 5)`. It becomes the natural
-   input material for the maker's *next* offer at mixdepth
-   `m + 1`. JoinMarket's intra-CJ symmetry means the ILP cannot
-   tell, within one CJ, which equal-output vout belongs to which
-   maker slot (any permutation of equal-output owners is
-   consistent with the same fee constraints). v6 leaves this edge
-   off the mainnet attack for that reason; §5.3 (v7) restores it
-   by using the consumer slot's own fee in the *next* CJ as a
-   fingerprint that selects exactly one producer slot when the
-   match is unambiguous.
+   lands in mixdepth $d{+}1 \bmod 5$. JoinMarket makers normally
+   advertise from whichever mixdepth currently holds the most
+   coins, which after a successful round is often (but not
+   always) the mixdepth that just received the equal output.
+   Deposits, withdrawals, and consolidations can push the
+   "fattest mixdepth" elsewhere, so the next advertisement is not
+   forced to be $d{+}1$. When the maker does come back from
+   mixdepth $d{+}1$, the equal output of $T$ is a natural input
+   for that next slot.
+
+   This produces an "equal-chain" same-wallet edge that v6 does
+   not use directly, because within one CJ all $n_{eq}$ equal
+   outputs look identical (any permutation of equal-output owners
+   is consistent with the ILP-recovered fee constraints).
+   Section 5.2 (v7) restores this edge by using the consumer
+   slot's own realised fee as a per-CJ fingerprint: if exactly
+   one slot in the producer CJ would have charged this fee at the
+   producer CJ's amount, we have identified that slot.
 
 Two more JoinMarket details matter for the analysis pipeline but
 not for the clusterer itself:
@@ -133,19 +173,27 @@ not for the clusterer itself:
   observed corpus.
 
 The clusterer uses fact 1 as a hard pairwise must-not-link, fact
-2 as a definite same-wallet must-link, and fact 3 in the
-simulator only. Fee bands, fidelity-bond values, nick patterns,
-or any other off-chain signal are not used by the clusterer; that
-intentional restriction is what gives precision = 1.0 by
+2 as a definite same-wallet must-link, and fact 3 (via the
+fee-fingerprint rule of §5.2) as a per-CJ disambiguator that
+sometimes turns the equal-chain edge into a definite must-link.
+Fees are therefore *used* by the clusterer, but only in a
+precision-preserving way: we accept a fee match as evidence only
+when it picks a single producer slot inside a single producer CJ,
+never as a global fee-band that pools several CJs. Fidelity-bond
+values, nick patterns, and any other off-chain signal are not
+used (with the explicit exception of §5.5, which uses the
+public orderbook to anchor FB-owner identity to funding-tx
+inputs). The intentional restriction to protocol-forced or
+single-CJ-unambiguous evidence is what gives precision = 1.0 by
 construction.
 
 ### 3.1 Worked example
 
 A two-maker CJ at amount 1,000,000 sats with one taker and makers
-`A`, `B`. Each maker charges a CoinJoin fee of 1,000 sats; the
+$A$, $B$. Each maker charges a CoinJoin fee of 1,000 sats; the
 miner fee for the whole transaction is 4,000 sats and is paid in
-full by the taker (default JoinMarket policy: `txfee = 0` for
-each maker offer):
+full by the taker (default JoinMarket policy: $\mathit{txfee} = 0$
+for each maker offer):
 
 ```
 inputs (total 4,480,000):
@@ -164,8 +212,8 @@ Cashflow per participant (counting only what each wallet sees;
 the equal outputs are 1,000,000 each, owned by their respective
 participants):
 
-- **Taker**: pays 2 * 1,000 (maker fees) + 4,000 (miner fee) =
-  **6,000 sats net cost** for the mix.
+- **Taker**: pays $2 \cdot 1{,}000$ (maker fees) plus $4{,}000$
+  (miner fee), a **6,000 sat net cost** for the mix.
 - **Maker A**: receives a 1,000,000 equal output and a 51,000
   change output for a total of 1,051,000 against 1,050,000
   inputs, **earning +1,000 sats**.
@@ -175,18 +223,33 @@ participants):
 - **Miner**: receives 4,000 sats.
 
 The taker funds both maker payouts and the miner fee; the makers
-are paid for providing liquidity. Negative cashflow for a maker
-would only occur if a misconfigured offer set a negative cjfee,
-which JoinMarket clients reject at orderbook-load time.
+are paid for providing liquidity. A maker's per-CJ cashflow is
+always non-negative (zero for a maker who advertises a zero fee).
 
 The ILP decomposition tells us which subset of inputs and which
 change output each participant contributed; it cannot tell which
 of the three equal-amount outputs is whose (the equal outputs are
 indistinguishable on-chain by amount alone). The change output
-for `A` (51,000 sats in mixdepth 1) will reappear as an input in
-some future CJ where `A` again advertises mixdepth 1; that future
-CJ is the chain edge that v6 walks. The same applies to `B`'s
+for $A$ (51,000 sats in mixdepth 1) will reappear as an input in
+some future CJ where $A$ again advertises mixdepth 1; that future
+CJ is the chain edge that v6 walks. The same applies to $B$'s
 change in mixdepth 0.
+
+The equal outputs go to mixdepth 2 of their respective owners and
+become natural inputs for whichever participant next advertises
+from mixdepth 2 (the wallet's depth-rotation policy will usually
+prefer the fattest mixdepth, which after this CJ is often
+mixdepth 2 but not necessarily). When such a reuse happens in a
+later CJ $S$, the consumer slot's realised fee in $S$ identifies
+the producer slot in $T$ if and only if no other slot in $T$ would
+have charged the same fee at $S$'s amount: that is the
+fee-fingerprint rule of §5.2 in concrete form. For example, if
+$A$ charges 0.1% relative and $B$ charges a fixed 800 sats, then
+on $S$ at amount $1{,}500{,}000$ the consumer slot's fee would be
+1,500 sats if it came from $A$ and 800 sats if it came from $B$:
+those values are distinct, so an observer who sees fee 1,500
+sats in $S$ for a slot whose first input is one of $T$'s equal
+outputs concludes the producer slot was $A$.
 
 ## 4. Mainnet corpus
 
@@ -202,8 +265,19 @@ JoinMarket CoinJoins, produced the snapshot used here:
 | ILP failures (timeout / infeasible at `max_fee_rel = 0.05`, `time_limit = 2s`) | 6,986 (29.3%) |
 | maker slots recovered | 129,301      |
 
-The ILP failure rate is the dominant residual uncertainty. CJs
-that do not decode contribute no slots and no chain edges.
+An ILP run on one CJ *succeeds* when it returns a feasible
+slot-by-slot decomposition that satisfies every per-slot
+constraint: each slot is a single mixdepth's worth of inputs that
+sums to exactly one equal output plus one change output, every
+slot's realised fee is non-negative, and the per-CJ fee budget is
+respected. We count anything else (solver timeout at 2 s, an LP
+relaxation that proves infeasibility under
+$\mathit{max\_fee\_rel} = 0.05$, or a feasible-but-degenerate
+solution that leaves any slot unassigned) as a failure. There is
+no partial decomposition output: every slot in a CJ either gets
+a unique attribution or the whole CJ is dropped.
+
+CJs that do not decode contribute no slots and no chain edges.
 Treating them as missing data is conservative for §7: any slot
 whose downstream remix happens to fall in an ILP-failed CJ looks
 like a singleton (uncertified) and *over-reports* residual
@@ -227,28 +301,31 @@ constraints:
   same maker, now re-advertising the same mixdepth.
 - **Must-link, equal-chain (fact 3).** In the simulator the
   equal-output owner is known and v6 unions producer with
-  consumer directly. On mainnet, v7 (§5.3) restores this edge by
+  consumer directly. On mainnet, v7 (§5.2) restores this edge by
   picking the producer slot from a *fee fingerprint* of the
   consumer slot in the next CJ; the edge fires only when that
   fingerprint identifies exactly one slot in the producer CJ,
   otherwise no edge is added.
 
-The clusterer never uses fees as a clustering signal (v7 uses
-fee values only as a per-CJ disambiguator that picks at most one
-producer slot from the n equal-output candidates), addresses,
-amounts, or any heuristic. Every merge is a direct consequence
-of the protocol. By construction the clusterer can only
-*under-cluster*: a maker whose downstream remix is missing from
-the corpus (crawl frontier, ILP failure, or exit from the
-ecosystem) appears as a singleton even when their wallet served
-many more CJs in reality. Precision is therefore = 1.0 by
-construction, and recall is bounded below by the fraction of CJs
-the corpus successfully observes and decodes. The full
-implementations are at
-[`src/coinjoin_simulator/clusterer_state_machine.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_state_machine.py)
-(v6, change-chain only) and
-[`src/coinjoin_simulator/clusterer_v7.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v7.py)
-(v7, with the fee-fingerprint equal-chain extension).
+The clusterer uses fees, but only locally: v7's fee-fingerprint
+rule (§5.2) selects at most one producer slot inside a single
+producer CJ from the $n_{eq}$ equal-output candidates. It does
+*not* pool slots across CJs by their advertised
+$(\mathit{cjfee}_r, \mathit{cjfee}_a)$ tuple, which is what
+earlier fee-band heuristics tried and what would silently union
+distinct same-policy makers. Addresses, amounts, fidelity-bond
+values, and nick patterns are never used as a clustering signal
+by themselves (§5.5 anchors known FB-owner identity to its own
+funding transaction's inputs via CIOH, which is a per-bond
+provable same-wallet edge, not a pattern match across bonds).
+Every merge is a direct consequence of the protocol. By
+construction the clusterer can only *under-cluster*: a maker
+whose downstream remix is missing from the corpus (crawl
+frontier, ILP failure, or exit from the ecosystem) appears as a
+singleton even when their wallet served many more CJs in
+reality. Precision is therefore $= 1.0$ by construction, and
+recall is bounded below by the fraction of CJs the corpus
+successfully observes and decodes.
 
 ### 5.1 Cluster size distribution
 
@@ -264,10 +341,10 @@ The full pass over the 129,301 mainnet slots produces:
 
 v7 absorbs 5,287 v6 clusters into existing ones through the
 equal-chain edge. v7.1 adds 127 cross-CJ unions through the
-non-CJ co-spend edge (§5.4), removing 81 further singletons. v7.2
+non-CJ co-spend edge (§5.3), removing 81 further singletons. v7.2
 adds 153 cross-CJ unions through the non-CJ round-trip edge
-(§5.5), removing 100 more clusters. v7.3 adds 6 cross-cluster
-unions through the fidelity-bond funding-tx CIOH edge (§5.6),
+(§5.4), removing 100 more clusters. v7.3 adds 6 cross-cluster
+unions through the fidelity-bond funding-tx CIOH edge (§5.5),
 collapsing 9 v7.2 components into 4 (a net reduction of 5
 clusters). The zero-collision result is the falsifiability check:
 any pair of slots in the same CJ that ended up in the same
@@ -282,62 +359,51 @@ median non-trivial cluster has 3. There is no cluster of
 "thousands of slots", which would be the signature of an
 over-merge.
 
-### 5.2 What goes wrong without these constraints
+### 5.2 v7: fee-fingerprint equal-output attribution
 
-A previous iteration of this study (v5) clustered maker change
-outputs by their *advertised fee tuple* `(cjfee_r, cjfee_a)`. That
-heuristic is structurally incompatible with the JoinMarket spec:
-two distinct makers running the same default policy land in one
-cluster, and a single maker who publishes more than one offer
-appears in several clusters. On the same corpus the legacy
-48-band clusterer produced one component with 55,847 UTXOs that
-v6/v7 decomposes into **6,001 distinct wallet components**:
+Every maker advertises a single offer (relative $\mathit{cjfee}_r$
+or absolute $\mathit{cjfee}_a$, not both) and the on-chain fee
+they earn in a CJ is a deterministic function of that offer and
+the equal-output amount $a$:
 
-![v5 fee-band clusters decomposed by v6/v7](figures/v5_vs_v6_fragmentation.svg)
+$$
+\mathit{fee}(a) \;=\;
+\begin{cases}
+\mathit{cjfee}_a & \text{(absolute maker)} \\
+\lfloor \mathit{cjfee}_r \cdot a \rceil & \text{(relative maker, sat-rounded)}.
+\end{cases}
+$$
 
-46 of the 47 v5 clusters that have any overlap with v6/v7
-fragment across many wallets. The fee-band heuristic was a
-many-to-many relation between clusters and identities; v6/v7
-replace it with a many-to-one relation that under-clusters by
-design when the on-chain evidence is absent.
-
-### 5.3 v7: fee-fingerprint equal-output attribution
-
-Every maker advertises a single offer (relative `cjfee_r` *or*
-absolute `cjfee_a`, not both) and the on-chain fee they earn in a
-CJ is a deterministic function of that offer and the equal-output
-amount: `fee = cjfee_a` for absolute makers,
-`fee = round(cjfee_r * equal_amt)` for relative makers (modulo
-one-sat rounding). The ILP recovers this realised fee per slot
-from the input total, equal output, and change output. The fee
-is observable but not by itself identifying: thousands of slots
-share the same `(cjfee_r, cjfee_a)` fingerprint across the
-corpus.
+The ILP recovers this realised fee per slot from the input total,
+equal output, and change output. The fee is observable but not by
+itself identifying: thousands of slots share the same
+$(\mathit{cjfee}_r, \mathit{cjfee}_a)$ fingerprint across the
+corpus, so a global fee-band clusterer would silently merge
+distinct same-policy makers.
 
 v7 uses the fee fingerprint locally, *within a single producer
-CJ*. When an equal output of producer CJ T is spent as a maker
-input of slot `c` in a later CJ S, the slot `c` carries its own
-fee `f_c = fee(c, equal_amt_S)`. We then look at T's maker slots
-S1..Sn (at most ~22 in practice) and ask: is there exactly one
-Si whose advertised offer produces `f_c` when applied to the
-equal-output amount of S? Concretely, for each Si we look up
-which interpretations of Si's realised fee in T are consistent
-with `f_c`:
+CJ*. When an equal output of producer CJ $T$ is spent as a maker
+input of slot $c$ in a later CJ $S$, the consumer slot $c$
+carries its own realised fee $f_c$ at amount $a_S$. We then look
+at $T$'s maker slots $S_1, \dots, S_n$ (at most about 22 in
+practice) and ask: is there exactly one $S_i$ whose advertised
+offer would produce $f_c$ at amount $a_S$? Concretely, for each
+$S_i$ with realised fee $f_i$ at amount $a_T$ we check the two
+admissible interpretations:
 
-- *abs* match: Si.realised_fee == f_c (Si is an absolute maker
-  with cjfee_a = f_c);
-- *rel* match:
-  Si.realised_fee / equal_amt_T == f_c / equal_amt_S (within one
-  ppm tolerance) (Si is a relative maker with the matching
-  cjfee_r).
+- *absolute* match: $f_i = f_c$ (so $S_i$'s policy is
+  $\mathit{cjfee}_a = f_c$);
+- *relative* match: $f_i / a_T \approx f_c / a_S$ within a 1 ppm
+  tolerance (so $S_i$'s policy is
+  $\mathit{cjfee}_r = f_c / a_S$).
 
-v7 adds the equal-chain edge if and only if **exactly one Si
-matches under abs OR rel**, *and* the abs interpretation and the
-rel interpretation do not point at two different slots. If two
-or more slots match (ambiguous), or the abs and rel candidates
-disagree (conflict), no edge is added. Conflicting
-interpretations are silently dropped because we cannot decide
-which is correct without knowing the maker's policy.
+v7 adds the equal-chain edge if and only if **exactly one $S_i$
+matches under absolute OR relative**, *and* the absolute and
+relative interpretations do not point at two different slots. If
+two or more slots match (ambiguous), or the absolute and relative
+candidates disagree (conflict), no edge is added. Conflicting
+interpretations are dropped because we cannot decide which is
+correct without knowing the maker's policy.
 
 Empirically on the mainnet corpus (51,439 cross-CJ equal-output
 reuses):
@@ -367,9 +433,9 @@ same-wallet link or no edge at all. v7 inherits v6's same-CJ
 must-not-link forbidance through a shared constrained union-find,
 so the 5,643 additional merges cannot smuggle a must-not-link
 violation through transitivity. We verify this directly on
-mainnet (§5.1: 0 collisions, §6.3: 0 cross-nick collisions).
+mainnet (§5.1: 0 collisions, §6.2: 0 cross-nick collisions).
 
-### 5.4 v7.1: non-CJ co-spend (Common Input Ownership Heuristic)
+### 5.3 v7.1: non-CJ co-spend (Common Input Ownership Heuristic)
 
 A maker who consolidates two distinct change UTXOs in a single
 non-CoinJoin spend reveals same-wallet ownership of those two
@@ -410,11 +476,10 @@ violation. The 0 same-CJ violations show that the must-not-link
 constraint correctly intercepts any candidate that would have
 merged two slots of the same CJ.
 
-The v7.1 module is implemented at
-[`src/coinjoin_simulator/clusterer_v71.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v71.py)
-and reuses the v7 union-find with the same forbid-set semantics.
+The v7.1 module reuses the v7 union-find with the same
+forbid-set semantics.
 
-### 5.5 v7.2: non-CJ round-trip CIOH
+### 5.4 v7.2: non-CJ round-trip CIOH
 
 The v7.1 filter caps non-CJ spenders at two outputs because we
 cannot prove same-owner across more outputs. Many real on-CJ
@@ -454,8 +519,6 @@ lowers the mean residual anonymity set from 3.711 (v7.1) to
 rounds both to 3.71). The simulator end-to-end check and the
 probe-side ground truth in §6 confirm no precision violations and
 0 cross-nick collisions under v7.2.
-The v7.2 module is implemented at
-[`src/coinjoin_simulator/clusterer_v72.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v72.py).
 
 Together, v7.1 and v7.2 close the off-chain CIOH side of the
 maker wallet: any non-CJ transaction whose shape is consistent
@@ -463,7 +526,7 @@ with a simple consolidation or single-hop forwarding is used as
 a same-wallet edge, while richer non-CJ shapes are conservatively
 ignored.
 
-### 5.6 v7.3: fidelity-bond funding-tx CIOH
+### 5.5 v7.3: fidelity-bond funding-tx CIOH
 
 JoinMarket makers advertise a *fidelity bond* (FB): a timelocked
 P2WSH output that the maker proves they own. The set of live FB
@@ -537,9 +600,6 @@ to three decimal places (mean certified makers per CJ moves from
 public orderbook by itself, with no probing, already widens a
 narrow but precision-safe maker-wallet edge.
 
-The v7.3 module is implemented at
-[`src/coinjoin_simulator/clusterer_v73.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v73.py).
-
 ## 6. Ground-truth validation
 
 We validate the clusterer (v6 through v7.3) against three
@@ -571,17 +631,7 @@ machine logic and the v7 attribution step end-to-end: when the
 corpus is complete, the combined clusterer recovers identity
 exactly.
 
-### 6.2 Within-CJ sybil-deduplication on mainnet
-
-The must-not-link constraint is the strongest structural precision
-check on mainnet: if any pair of slots from the same CJ ends up in
-the same cluster, the clusterer has falsified one of its own
-assumptions. On the 16,890 decoded mainnet CJs there are zero
-such collisions across all five iterations (v6 through v7.3,
-see §5.1). This is a hard upper bound on the precision violation
-rate (it is not a recall statement).
-
-### 6.3 Active probing of real maker wallets
+### 6.2 Active probing of real maker wallets
 
 In late April 2026 we ran three probing rounds against the live
 JoinMarket mainnet orderbook, one per CJ amount (100k / 150k /
@@ -595,7 +645,7 @@ both negotiations.
 A maker advertises only one mixdepth at a time, so the probe-side
 invariant is stronger than just "same wallet": two UTXOs from the
 same nick in the same probe round come from the **same mixdepth
-of the same wallet**. This is the property §6.3 uses both to
+of the same wallet**. This is the property §6.2 uses both to
 confirm precision and to look for missed edges.
 
 | metric                                       | v6   | v7   | v7.1 | v7.2 | v7.3 |
@@ -637,23 +687,26 @@ check on 16,890 mainnet CJs, and by the probing ground truth on
 For each ILP-decoded CJ T, the taker hides in a published
 anonymity set of `n_eq = m + 1` equal outputs (one per maker plus
 the taker). Define a maker slot as *certified* when the clusterer
-places it in a cluster of size >= 2 (the slot is linked by at
+places it in a cluster of size $\geq 2$ (the slot is linked by at
 least one definite UTXO chain to another CJ in the corpus). Every
 certified maker removes one candidate from the taker's anonymity
 set, since the taker cannot be a maker whose identity persists
-across CJs. The residual anonymity set lower bound is therefore
+across CJs. The residual anonymity set lower bound for round $T$
+is therefore
 
-    k(T) = n_eq(T) - n_certified_makers(T).
+$$
+k(T) \;=\; n_{eq}(T) \;-\; n_{\text{certified}}(T).
+$$
 
 The taker is never certified by construction (we have no chain
 evidence about who the taker is, so they always remain in the
-residual set). The minimum value of `k(T)` is therefore 1, the
+residual set). The minimum value of $k(T)$ is therefore 1, the
 taker alone.
 
 We do not subtract more even when the taker's own slot happens to
 chain forward, because the evidence does not distinguish "taker
 who remixes" from "maker whose remix we observed". The reported
-`k(T)` is the **lower bound** on the true residual anonymity set.
+$k(T)$ is the **lower bound** on the true residual anonymity set.
 
 ### 7.1 Headline
 
@@ -797,7 +850,7 @@ every CJ regardless.
 - Makers who consolidate winnings off-CJ between rounds (move
   funds to cold storage and refund the next round from a freshly
   derived address) look like two singletons to the clusterer. The
-  probe data (§6.3) suggests this is not the dominant pattern,
+  probe data (§6.2) suggests this is not the dominant pattern,
   but a direct count is not yet available.
 - Active-adversary edge (probed nick to advertised UTXO).
   We prototyped a v7.4 layer that unions any v7.3 clusters whose
