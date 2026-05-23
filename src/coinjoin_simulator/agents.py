@@ -201,11 +201,25 @@ class Maker:
     # ------------------------------------------------------------------
 
     def select_input_mixdepth(self, amount_sats: int) -> int | None:
-        """Lowest mixdepth with enough balance.  (yieldgenerator.py:256-262)."""
-        for m in sorted(self.utxos.keys()):
-            if self.balance_in_mixdepth(m) >= amount_sats:
-                return m
-        return None
+        """Richest mixdepth with enough balance.
+
+        Matches joinmarket-ng `maker/src/maker/coinjoin.py:_select_our_utxos`
+        (lines 546-561 in the NG tree), which picks the eligible mixdepth
+        with the *maximum* balance. This is different from the legacy
+        yieldgenerator behavior which picked the *lowest* viable mixdepth,
+        and it materially affects how a maker's UTXOs flow across the
+        five mixdepths over time (richest-mixdepth selection tends to
+        re-use the same accumulation pool repeatedly, which is what makes
+        the v6 change-chain edge so dense).
+        """
+        eligible = {
+            m: self.balance_in_mixdepth(m)
+            for m in self.utxos
+            if self.balance_in_mixdepth(m) >= amount_sats
+        }
+        if not eligible:
+            return None
+        return max(eligible, key=lambda m: eligible[m])
 
     def fill_offer(
         self,

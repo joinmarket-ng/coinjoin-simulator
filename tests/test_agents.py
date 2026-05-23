@@ -105,10 +105,14 @@ def test_maker_announce_offer_quantization_disabled_by_default() -> None:
     assert math.isclose(float(o["cjfee"]), 1.4e-5, rel_tol=1e-6)
 
 
-def test_maker_select_input_mixdepth_picks_lowest() -> None:
+def test_maker_select_input_mixdepth_picks_richest() -> None:
+    # joinmarket-ng selects the richest eligible mixdepth (max balance),
+    # not the lowest. mixdepth 2 has 5 BTC vs. mixdepth 0's 2 BTC, so any
+    # amount that fits both should pick 2; larger amounts that only fit
+    # in 2 still pick 2; unfittable amounts return None.
     m = _make_maker(seed=3, balance=2_000_000)
     m.utxos[2] = [Utxo("u-2", 5_000_000, 2)]
-    assert m.select_input_mixdepth(1_000_000) == 0
+    assert m.select_input_mixdepth(1_000_000) == 2
     assert m.select_input_mixdepth(3_000_000) == 2
     assert m.select_input_mixdepth(10_000_000) is None
 
