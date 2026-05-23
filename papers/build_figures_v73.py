@@ -214,8 +214,21 @@ def cluster_size_distribution_v7() -> None:
     n_total = report["n_clusters"]
     ax.set_title(f"v7.3 maker-cluster size distribution (mainnet, n={n_total:,} clusters)")
     ax.set_yscale("log")
+    # Plain-integer y-tick labels (avoid 10^0 scientific notation).
+    import matplotlib.ticker as _mticker
+    y_max = max(ys)
+    tick_vals = [1, 10, 100, 1_000, 10_000, 100_000]
+    tick_vals = [t for t in tick_vals if t <= max(y_max * 1.5, 10)]
+    ax.set_yticks(tick_vals)
+    ax.set_yticklabels([f"{t:,}" for t in tick_vals])
+    ax.yaxis.set_minor_formatter(_mticker.NullFormatter())
     if max(xs) > 20:
         ax.set_xscale("log")
+        x_ticks = [1, 2, 5, 10, 20, 50, 100]
+        x_ticks = [t for t in x_ticks if t <= max(xs) * 1.2]
+        ax.set_xticks(x_ticks)
+        ax.set_xticklabels([str(t) for t in x_ticks])
+        ax.xaxis.set_minor_formatter(_mticker.NullFormatter())
     _save(fig, "cluster_size_distribution.svg")
 
 
