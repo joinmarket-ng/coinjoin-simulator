@@ -484,23 +484,40 @@ forbid-set semantics.
 The v7.1 filter caps non-CJ spenders at two outputs because we
 cannot prove same-owner across more outputs. Many real on-CJ
 remixes also leave a single-hop non-CJ trail in between: a maker
-consumes their change at mixdepth `m`, immediately rebroadcasts
+consumes their change at mixdepth $d$, immediately rebroadcasts
 through a two-output hop transaction (consolidation, fee bump,
-deposit echo), and the resulting output is then consumed as a
-maker-slot input in a later CJ. This is the change-chain edge of
-v6 with one non-CJ hop interposed.
+deposit echo), and one of the hop outputs is then consumed as an
+input of a later maker slot. This is the change-chain edge of v6
+with one non-CJ hop interposed.
 
-The v7.2 edge fires when a non-JM transaction `H` satisfies all
+The v7.2 edge fires when a non-JM transaction $H$ satisfies all
 of:
 
-1. `H` has at most two outputs (same CIOH-safety filter as v7.1);
-2. `H` consumes at least one maker change UTXO from a known
-   producer slot `p`;
-3. at least one of `H`'s outputs is the *first input* of a maker
-   slot `c` in a later CJ.
+1. $H$ has at most two outputs (same CIOH-safety filter as v7.1);
+2. $H$ consumes at least one maker change UTXO from a known
+   producer slot $p$;
+3. at least one of $H$'s outputs is consumed as an input of a
+   maker slot $c$ in a later CJ.
 
-In that case `p` and `c` are unioned. Same-CJ pairs are dropped
-by the inherited forbid-set.
+In that case $p$ and $c$ are unioned. The consumer slot $c$ may
+have used the hop output as any of its inputs (the slot input set
+is order-independent in the ILP), not just the first one.
+Same-CJ pairs are dropped by the inherited forbid-set.
+
+**Equal-amount discard (future work).** A v7.2 hop $H$ with at
+most two outputs *could* in principle have one of its outputs
+match a JM equal-output amount. In that case, when $H$'s output
+funds a maker slot at amount $a$, the output is structurally
+indistinguishable from a maker who simply picked an equal-amount
+UTXO from any earlier source: the unionisation reduces to the
+same equal-chain inference v7 already does in §5.2. A stricter
+v7.2 variant would discard such hops, treating them as equal-
+chain candidates rather than CIOH candidates. We have not
+applied this discard in the headline numbers; on the mainnet
+corpus 15,935 distinct JM equal-output amounts exist, but most
+v7.2 hops carry change-shaped (non-round) values that do not
+match any of them, so the expected effect on the 153 reported
+unions is small.
 
 Empirically on the mainnet corpus:
 
