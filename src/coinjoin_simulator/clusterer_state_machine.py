@@ -178,9 +178,13 @@ def _extract_slots_from_simresult(res: SimResult) -> list[MakerSlot]:
     role and seeding it with the makers' starting UTXOs.
     """
     # Build a persistent owner index from every maker-owned output ever
-    # emitted (including starting UTXOs surfaced through the residual
-    # ``maker_id_by_utxo`` map) so we can attribute later-spent inputs.
-    owner_of_utxo: dict[str, str] = dict(res.maker_id_by_utxo)
+    # emitted: prefer the simulator's historical map ``maker_id_by_utxo_ever``
+    # (which retains consumed UTXOs), fall back to the live residual map
+    # plus per-tx output sweep for older SimResult shapes that do not
+    # carry the historical map.
+    owner_of_utxo: dict[str, str] = dict(res.maker_id_by_utxo_ever)
+    if not owner_of_utxo:
+        owner_of_utxo = dict(res.maker_id_by_utxo)
     for tx in res.txs:
         for out in tx.outputs:
             if out.role in (OutputRole.MAKER_CJ, OutputRole.MAKER_CHANGE):

@@ -145,8 +145,13 @@ class SimResult:
     txs: list[Tx]
     offer_log: list[OfferLogEntry]
     payment_records: list[PaymentRecord]
-    maker_id_by_utxo: dict[str, str]  # utxo_id -> maker counterparty
+    maker_id_by_utxo: dict[str, str]  # utxo_id -> maker counterparty (final unspent set)
     utxo_value_by_id: dict[str, int]  # utxo_id -> value in sats
+    maker_id_by_utxo_ever: dict[str, str] = field(default_factory=dict)
+    """Historical maker -> utxo owner map: every utxo a maker ever owned
+    (starting UTXOs plus CJ outputs), keyed by utxo_id, never popped on
+    spend. Lets clusterers reconstruct provenance for inputs that have
+    been consumed by the time the simulator finishes."""
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +215,7 @@ class World:
     offer_log: list[OfferLogEntry] = field(default_factory=list)
     payment_records: list[PaymentRecord] = field(default_factory=list)
     maker_id_by_utxo: dict[str, str] = field(default_factory=dict)
+    maker_id_by_utxo_ever: dict[str, str] = field(default_factory=dict)
     utxo_value_by_id: dict[str, int] = field(default_factory=dict)
     _queue: list[_Event] = field(default_factory=list)
 
@@ -235,6 +241,7 @@ class World:
             for ms_utxos in m.utxos.values():
                 for u in ms_utxos:
                     w.maker_id_by_utxo[u.utxo_id] = m.counterparty
+                    w.maker_id_by_utxo_ever[u.utxo_id] = m.counterparty
                     w.utxo_value_by_id[u.utxo_id] = u.value_sats
         # Seed initial PaymentRecord rows so the audit trail covers every taker.
         for t in w.takers:
@@ -290,6 +297,7 @@ class World:
             payment_records=list(self.payment_records),
             maker_id_by_utxo=dict(self.maker_id_by_utxo),
             utxo_value_by_id=dict(self.utxo_value_by_id),
+            maker_id_by_utxo_ever=dict(self.maker_id_by_utxo_ever),
         )
 
     def _step(self, ev: _Event) -> None:
@@ -602,6 +610,7 @@ class World:
                 Utxo(utxo_id=cj_out.output_id, value_sats=cj_out.value_sats, mixdepth=dest_mix),
             )
             self.maker_id_by_utxo[cj_out.output_id] = maker.counterparty
+            self.maker_id_by_utxo_ever[cj_out.output_id] = maker.counterparty
             self.utxo_value_by_id[cj_out.output_id] = cj_out.value_sats
             # Mint change -> src mixdepth.
             if change > 0:
@@ -609,6 +618,7 @@ class World:
                     Utxo(utxo_id=change_out.output_id, value_sats=change, mixdepth=src_mix),
                 )
                 self.maker_id_by_utxo[change_out.output_id] = maker.counterparty
+                self.maker_id_by_utxo_ever[change_out.output_id] = maker.counterparty
                 self.utxo_value_by_id[change_out.output_id] = change
 
     def _update_payment_record(self, taker: PaymentTaker, tx: Tx) -> None:
