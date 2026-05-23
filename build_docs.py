@@ -344,71 +344,79 @@ def _md_to_html(md: str) -> str:
 
 
 def _load_kpis() -> dict[str, Any]:
-    """Pull live numbers from on-disk reports (best-effort).
+    """Pull live numbers from the v6 reports (best-effort).
 
-    Headline framing: equal-output anonymity-set resistance, v5 cluster
-    sweep + forward-spend deanon driver. Older v3 / ILP-decomposition
-    KPIs are no longer surfaced.
+    Headline framing: maker-wallet clustering + taker anonymity-set
+    reduction under the v6 chain-edge clusterer (precision = 1.0 by
+    construction, validated by simulator ARI, within-CJ sybil-dedup,
+    and probing ground truth).
     """
     kpis: dict[str, Any] = {
         "n_corpus_txs": None,
-        "total_volume_btc": None,
+        "n_decoded_txs": None,
+        "n_ilp_failed": None,
+        "n_slots": None,
         "n_clusters": None,
-        "n_change_outputs": None,
+        "n_singletons": None,
+        "n_nontrivial": None,
+        "largest_cluster": None,
+        "n_same_cj_collisions": None,
         "n_analysed": None,
-        "n_full_deanon": None,
-        "frac_full_deanon": None,
-        "frac_anonset_ge5": None,
-        "frac_anonset_ge4": None,
-        "frac_anonset_ge3": None,
-        "frac_no_reduction": None,
-        "frac_any_reduction": None,
-        "mean_reduction_ratio": None,
-        "deanon_status": "pending",
+        "mean_n_eq": None,
+        "mean_certified": None,
+        "mean_residual": None,
+        "share_any_reduction": None,
+        "share_all_certified": None,
+        "median_residual": None,
+        "probe_nicks_total": None,
+        "probe_nicks_matched": None,
+        "probe_cross_nick_collisions": None,
     }
-    # v5 cluster sweep summary
-    sweep_p = DATA / "mainnet_report_v5.json"
-    if sweep_p.exists():
-        s = json.loads(sweep_p.read_text())
-        kpis["n_corpus_txs"] = s.get("n_txs_seen")
+    # v6 cluster report
+    v6_report_p = TMP / "mainnet_v6_report.json"
+    if v6_report_p.exists():
+        s = json.loads(v6_report_p.read_text())
+        kpis["n_decoded_txs"] = s.get("n_tx_decoded")
+        kpis["n_ilp_failed"] = s.get("n_tx_failed")
+        kpis["n_corpus_txs"] = (
+            (kpis["n_decoded_txs"] or 0) + (kpis["n_ilp_failed"] or 0)
+        ) or None
+        kpis["n_slots"] = s.get("n_slots")
         kpis["n_clusters"] = s.get("n_clusters")
-    cluster_dir = TMP / "mainnet_clusters_v5"
-    if cluster_dir.exists():
-        total = 0
-        n_outputs = 0
-        for f in sorted(cluster_dir.glob("cluster_*.json")):
-            d = json.loads(f.read_text())
-            total += d.get("total_value_sats", 0)
-            n_outputs += d.get("n_outputs", 0)
-        kpis["total_volume_btc"] = total / 1e8
-        kpis["n_change_outputs"] = n_outputs
+        kpis["n_singletons"] = s.get("n_singletons")
+        kpis["n_nontrivial"] = s.get("nontrivial_clusters")
+        kpis["largest_cluster"] = s.get("largest_cluster")
+        kpis["n_same_cj_collisions"] = s.get("same_cj_collisions", 0)
 
-    # Equal-output deanon stats
-    deanon_p = TMP / "deanon_eq_stats.json"
-    if deanon_p.exists():
-        s = json.loads(deanon_p.read_text())
-        summary = s.get("summary", {})
-        anon_dist = {int(k): int(v) for k, v in s.get("anon_set_dist", {}).items()}
-        n_total = summary.get("n_total") or sum(anon_dist.values())
-        kpis["n_analysed"] = n_total
-        kpis["n_full_deanon"] = summary.get("n_full_deanon")
-        kpis["frac_full_deanon"] = summary.get("frac_full_deanon")
-        kpis["frac_any_reduction"] = summary.get("frac_any_reduction")
-        kpis["frac_no_reduction"] = (
-            1.0 - summary["frac_any_reduction"] if "frac_any_reduction" in summary else None
-        )
-        if n_total:
-            ge5 = sum(c for k, c in anon_dist.items() if k >= 5)
-            ge4 = sum(c for k, c in anon_dist.items() if k >= 4)
-            ge3 = sum(c for k, c in anon_dist.items() if k >= 3)
-            kpis["frac_anonset_ge5"] = ge5 / n_total
-            kpis["frac_anonset_ge4"] = ge4 / n_total
-            kpis["frac_anonset_ge3"] = ge3 / n_total
-        # mean reduction ratio: not surfaced by the analyser today;
-        # the paper quotes 0.111 (mean) / 0.10 (median) directly. Fall
-        # back to a constant if absent.
-        kpis["mean_reduction_ratio"] = summary.get("mean_reduction_ratio") or 0.111
-        kpis["deanon_status"] = "complete"
+    # Anonymity-set reduction (v6 headline)
+    anon_p = TMP / "v6" / "anonset_reduction_v6.json"
+    if anon_p.exists():
+        a = json.loads(anon_p.read_text())
+        kpis["n_analysed"] = a.get("n_cjs_analyzed")
+        kpis["mean_n_eq"] = a.get("mean_n_eq")
+        kpis["mean_certified"] = a.get("mean_certified_makers")
+        kpis["mean_residual"] = a.get("mean_residual_anon_set")
+        kpis["share_any_reduction"] = a.get("share_cjs_with_any_reduction")
+        kpis["share_all_certified"] = a.get("share_cjs_all_makers_certified")
+        # median from histogram
+        hist = {int(k): int(v) for k, v in a.get("residual_anon_set_histogram", {}).items()}
+        total = sum(hist.values())
+        if total:
+            half = total / 2
+            cum = 0
+            for k in sorted(hist.keys()):
+                cum += hist[k]
+                if cum >= half:
+                    kpis["median_residual"] = k
+                    break
+
+    # Probe-attack validation (v6 ground truth)
+    probe_p = TMP / "v6" / "probe_validation_v6.json"
+    if probe_p.exists():
+        p = json.loads(probe_p.read_text())
+        kpis["probe_nicks_total"] = p.get("n_nicks")
+        kpis["probe_nicks_matched"] = p.get("n_nicks_with_any_v6_match")
+        kpis["probe_cross_nick_collisions"] = p.get("precision_violations_clusters", 0)
 
     # Probing study KPIs (from pinned study data files)
     try:
@@ -552,12 +560,13 @@ def _page(title: str, body: str, with_math: bool = False) -> str:
 
 def build_index(kpis: dict[str, Any]) -> str:
     n_txs = kpis.get("n_corpus_txs") or 0
-    vol = kpis.get("total_volume_btc") or 0
-    n_analysed = kpis.get("n_analysed") or 0
-    ge5 = (kpis.get("frac_anonset_ge5") or 0) * 100
-    ge4 = (kpis.get("frac_anonset_ge4") or 0) * 100
-    n_full = kpis.get("n_full_deanon") or 0
-    frac_full = (kpis.get("frac_full_deanon") or 0) * 100
+    n_decoded = kpis.get("n_decoded_txs") or 0
+    n_clusters = kpis.get("n_clusters") or 0
+    n_nontrivial = kpis.get("n_nontrivial") or 0
+    n_collisions = kpis.get("n_same_cj_collisions") or 0
+    mean_n_eq = kpis.get("mean_n_eq") or 0.0
+    mean_residual = kpis.get("mean_residual") or 0.0
+    share_any = (kpis.get("share_any_reduction") or 0) * 100
 
     def _pct(v: Any) -> str:
         if v is None:
@@ -581,18 +590,18 @@ def build_index(kpis: dict[str, Any]) -> str:
 + <a href="https://github.com/joinmarket-ng/joinmarket-ng">joinmarket-ng</a>
 codebases.</p>
 
-<h2><a href="mainnet-deanon.html">JoinMarket equal-output anonymity in practice (May 2026)</a></h2>
-<p>Replays a fee-fingerprint maker-clustering and forward-spend
-attribution attack against a {n_txs:,}-tx mainnet JoinMarket corpus
-({vol:,.0f} BTC of clustered maker-change volume). Headline finding:
-<strong>JoinMarket holds up well</strong> &mdash; the taker's
-equal-output anonymity set is preserved at meaningful sizes in the
-overwhelming majority of CoinJoins.</p>
+<h2><a href="mainnet-deanon.html">JoinMarket maker clustering &amp; taker anonymity-set reduction (May 2026)</a></h2>
+<p>A passive on-chain adversary clusters JoinMarket maker wallets
+through protocol-mandated mixdepth-rotating change outputs, at
+precision = 1.0 by construction. On the full mainnet corpus
+({n_txs:,} JM CoinJoins, {n_decoded:,} ILP-decoded), the v6 clusterer
+recovers {n_clusters:,} certified wallet components. Each
+certified maker shrinks the taker's per-CJ anonymity set.</p>
 <div class="kpis">
-  <div class="kpi safe"><b>{ge5:.1f}%</b><span>CJs preserve taker anonymity-set &ge; 5 (of {n_analysed:,} analyzed)</span></div>
-  <div class="kpi safe"><b>{ge4:.1f}%</b><span>CJs preserve anonymity-set &ge; 4</span></div>
-  <div class="kpi"><b>{n_full} / {n_analysed:,}</b><span>CJs fully deanonymized ({frac_full:.3f}%)</span></div>
-  <div class="kpi"><b>11%</b><span>Mean per-CJ reduction of taker hide-set</span></div>
+  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v6 residual)</span></div>
+  <div class="kpi danger"><b>{share_any:.1f}%</b><span>CJs where at least one maker is certified</span></div>
+  <div class="kpi"><b>{n_clusters:,}</b><span>v6 maker clusters ({n_nontrivial:,} non-trivial)</span></div>
+  <div class="kpi safe"><b>{n_collisions}</b><span>Same-CJ precision violations (out of {n_decoded:,} CJs)</span></div>
 </div>
 <p><a href="mainnet-deanon.html">&rarr; full study</a></p>
 
@@ -616,40 +625,38 @@ def build_deanon_page(kpis: dict[str, Any]) -> str:
     md = PAPER_MD.read_text() if PAPER_MD.exists() else "# (paper missing)"
     body_md = _md_to_html(md)
     n_txs = kpis.get("n_corpus_txs") or 0
-    vol = kpis.get("total_volume_btc") or 0
+    n_decoded = kpis.get("n_decoded_txs") or 0
+    n_slots = kpis.get("n_slots") or 0
     n_clusters = kpis.get("n_clusters") or 0
-    n_outputs = kpis.get("n_change_outputs") or 0
-    n_analysed = kpis.get("n_analysed") or 0
-    n_full = kpis.get("n_full_deanon") or 0
-    frac_full = (kpis.get("frac_full_deanon") or 0) * 100
-    ge5 = (kpis.get("frac_anonset_ge5") or 0) * 100
-    ge4 = (kpis.get("frac_anonset_ge4") or 0) * 100
-    no_red = (kpis.get("frac_no_reduction") or 0) * 100
-    if kpis.get("deanon_status") == "complete":
-        status_note = ""
-    else:
-        status_note = (
-            '<div class="note">Equal-output deanon stats not yet '
-            "available; KPIs above will refresh after the analyser run.</div>"
-        )
+    n_nontrivial = kpis.get("n_nontrivial") or 0
+    largest = kpis.get("largest_cluster") or 0
+    n_collisions = kpis.get("n_same_cj_collisions") or 0
+    mean_n_eq = kpis.get("mean_n_eq") or 0.0
+    mean_residual = kpis.get("mean_residual") or 0.0
+    share_any = (kpis.get("share_any_reduction") or 0) * 100
+    share_all = (kpis.get("share_all_certified") or 0) * 100
+    median_residual = kpis.get("median_residual")
+    median_residual_s = "n/a" if median_residual is None else str(median_residual)
+    probe_total = kpis.get("probe_nicks_total") or 0
+    probe_matched = kpis.get("probe_nicks_matched") or 0
+    probe_collisions = kpis.get("probe_cross_nick_collisions") or 0
 
     kpi_card = f"""
-<h1>JoinMarket Equal-Output Anonymity in Practice</h1>
-<p><em>May 2026 &mdash; coinjoin-simulator + joinmarket-analyzer</em></p>
+<h1>JoinMarket Maker Clustering and Taker Anonymity-Set Reduction</h1>
+<p><em>May 2026 (coinjoin-simulator + joinmarket-analyzer, v6 clusterer)</em></p>
 <div class="kpis">
-  <div class="kpi"><b>{n_txs:,}</b><span>JM CoinJoin txs in corpus</span></div>
-  <div class="kpi"><b>{vol:,.0f} BTC</b><span>Clustered maker-change volume</span></div>
-  <div class="kpi"><b>{n_outputs:,}</b><span>Maker change outputs in {n_clusters} fee-band clusters</span></div>
-  <div class="kpi"><b>{n_analysed:,}</b><span>CoinJoins analyzed end-to-end</span></div>
-  <div class="kpi safe"><b>{ge5:.1f}%</b><span>Taker anon-set &ge; 5 preserved</span></div>
-  <div class="kpi safe"><b>{ge4:.1f}%</b><span>Taker anon-set &ge; 4 preserved</span></div>
-  <div class="kpi"><b>{n_full} ({frac_full:.3f}%)</b><span>Fully deanonymized</span></div>
-  <div class="kpi"><b>{no_red:.1f}%</b><span>CJs with zero attribution</span></div>
+  <div class="kpi"><b>{n_txs:,}</b><span>JM CoinJoin txs in corpus ({n_decoded:,} ILP-decoded)</span></div>
+  <div class="kpi"><b>{n_slots:,}</b><span>Maker slots recovered</span></div>
+  <div class="kpi"><b>{n_clusters:,}</b><span>v6 clusters ({n_nontrivial:,} non-trivial, largest {largest})</span></div>
+  <div class="kpi safe"><b>{n_collisions}</b><span>Same-CJ precision violations (out of {n_decoded:,})</span></div>
+  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v6 residual)</span></div>
+  <div class="kpi danger"><b>{share_any:.1f}%</b><span>CJs where at least one maker is certified</span></div>
+  <div class="kpi"><b>{median_residual_s}</b><span>Median residual anonymity set ({share_all:.1f}% reach residual = 1)</span></div>
+  <div class="kpi safe"><b>{probe_collisions} / {probe_matched}</b><span>Cross-nick collisions / probed nicks with v6 matches (of {probe_total} probed)</span></div>
 </div>
-{status_note}
 """
     body = kpi_card + body_md
-    return _page("JoinMarket Equal-Output Anonymity in Practice", body, with_math=True)
+    return _page("JoinMarket Maker Clustering and Taker Anonymity-Set Reduction", body, with_math=True)
 
 
 def build_probing_page() -> str:

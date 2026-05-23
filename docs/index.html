@@ -91,18 +91,18 @@ p:has(> img:only-child) { text-align: center; margin: 1.4rem 0; }
 + <a href="https://github.com/joinmarket-ng/joinmarket-ng">joinmarket-ng</a>
 codebases.</p>
 
-<h2><a href="mainnet-deanon.html">JoinMarket equal-output anonymity in practice (May 2026)</a></h2>
-<p>Replays a fee-fingerprint maker-clustering and forward-spend
-attribution attack against a 63,686-tx mainnet JoinMarket corpus
-(392,390 BTC of clustered maker-change volume). Headline finding:
-<strong>JoinMarket holds up well</strong> &mdash; the taker's
-equal-output anonymity set is preserved at meaningful sizes in the
-overwhelming majority of CoinJoins.</p>
+<h2><a href="mainnet-deanon.html">JoinMarket maker clustering &amp; taker anonymity-set reduction (May 2026)</a></h2>
+<p>A passive on-chain adversary clusters JoinMarket maker wallets
+through protocol-mandated mixdepth-rotating change outputs, at
+precision = 1.0 by construction. On the full mainnet corpus
+(23,876 JM CoinJoins, 16,890 ILP-decoded), the v6 clusterer
+recovers 74,471 certified wallet components. Each
+certified maker shrinks the taker's per-CJ anonymity set.</p>
 <div class="kpis">
-  <div class="kpi safe"><b>95.2%</b><span>CJs preserve taker anonymity-set &ge; 5 (of 17,071 analyzed)</span></div>
-  <div class="kpi safe"><b>98.8%</b><span>CJs preserve anonymity-set &ge; 4</span></div>
-  <div class="kpi"><b>1 / 17,071</b><span>CJs fully deanonymized (0.006%)</span></div>
-  <div class="kpi"><b>11%</b><span>Mean per-CJ reduction of taker hide-set</span></div>
+  <div class="kpi"><b>7.66 &rarr; 2.97</b><span>Mean taker anonymity set (published &rarr; v6 residual)</span></div>
+  <div class="kpi danger"><b>97.6%</b><span>CJs where at least one maker is certified</span></div>
+  <div class="kpi"><b>74,471</b><span>v6 maker clusters (24,345 non-trivial)</span></div>
+  <div class="kpi safe"><b>0</b><span>Same-CJ precision violations (out of 16,890 CJs)</span></div>
 </div>
 <p><a href="mainnet-deanon.html">&rarr; full study</a></p>
 
