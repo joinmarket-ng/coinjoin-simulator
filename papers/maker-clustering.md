@@ -397,16 +397,43 @@ admissible interpretations:
   tolerance (so $S_i$'s policy is
   $\mathit{cjfee}_r = f_c / a_S$).
 
-v7 adds the equal-chain edge if and only if **exactly one $S_i$
-matches under absolute OR relative**, *and* the absolute and
-relative interpretations do not point at two different slots. If
-two or more slots match (ambiguous), or the absolute and relative
-candidates disagree (conflict), no edge is added. Conflicting
-interpretations are dropped because we cannot decide which is
-correct without knowing the maker's policy.
+v7 admits three gate strengths, in increasing order of
+precision and decreasing order of recall. All three share the
+same enumeration above; they differ only in which of the
+enumerated matches becomes a same-wallet edge.
+
+**Per-CJ univocal gate (loose).** The original v7 gate. An edge
+is added if and only if exactly one $S_i$ matches under absolute
+*or* relative, and the absolute and relative interpretations do
+not point at two different slots. Ambiguous within-$T$ matches
+and conflicting interpretations are dropped.
+
+**Per-CJ both-interpretations gate (strict).** An edge is added
+only when both interpretations independently identify the *same*
+$S_i$ as the unique match. This is the
+``unique_both_same_slot`` subset of the loose gate. It rejects
+single-criterion matches whose target slot may have coincidentally
+collided with the consumer fingerprint under per-announcement fee
+jitter (\u00a76.1).
+
+**Corpus-unique gate.** An edge is added only when the chosen
+$S_i$'s fingerprint $(f_i, f_i / a_T)$ is, across the entire
+corpus of v7-enriched slots, free of doppelgangers: no slot
+outside $T$ and outside the consumer $c$ carries the same
+absolute *and* the same relative fingerprint. This is strictly
+stronger than per-CJ univocality because it requires the
+producer's fee policy to be unique in the corpus, not merely
+unique inside $T$. The corpus-unique gate is the one that
+restores precision = 1.0 in the controlled simulator
+experiment (\u00a76.1, Table). The two per-CJ gates are
+heuristic: they preserve precision under sparse fingerprint
+collisions, as on the mainnet corpus where the empirical
+violation rate is 0 (\u00a76.2), but they cannot guarantee it
+under adversarial jitter where many makers concentrate near the
+same fee policy.
 
 Empirically on the mainnet corpus (51,439 cross-CJ equal-output
-reuses):
+reuses) under the per-CJ loose gate:
 
 | disposition                       |   count  | share  |
 |-----------------------------------|---------:|-------:|
@@ -433,7 +460,14 @@ same-wallet link or no edge at all. v7 inherits v6's same-CJ
 must-not-link forbidance through a shared constrained union-find,
 so the 5,643 additional merges cannot smuggle a must-not-link
 violation through transitivity. We verify this directly on
-mainnet (§5.1: 0 collisions, §6.2: 0 cross-nick collisions).
+mainnet (\u00a75.1: 0 collisions, \u00a76.2: 0 cross-nick
+collisions). The mainnet headline numbers reported throughout
+the rest of this paper use the per-CJ loose gate, since the
+empirical violation rate is 0 on this corpus and the recall delta
+to the corpus-unique gate is non-trivial. The corpus-unique gate
+is the conservative choice when fee-policy density is high or
+when an adversarial maker can deliberately jitter fees to forge
+edges; see \u00a76.1 for the simulator comparison.
 
 ### 5.3 v7.1: non-CJ co-spend (Common Input Ownership Heuristic)
 
@@ -660,30 +694,125 @@ We validate the clusterer (v6 through v7.3) against three
 independent ground-truth sources, all of which a passive on-chain
 analyst would *not* have but which we can construct here.
 
-### 6.1 Simulator end-to-end (perfect labels)
+### 6.1 Simulator end-to-end and the v7 gate hierarchy
 
 The accompanying coinjoin-simulator builds a synthetic JoinMarket
-network of 12 makers running a default relative-fee policy and
-one rotating taker. We let it produce 100 CJs with the same ILP
-pipeline and apply both v6 and v7 to the simulator output:
+network with the same ILP pipeline driving v6 and v7. We use it
+in two regimes:
 
-| metric             | value |
-|--------------------|------:|
-| n_makers           | 12    |
-| n_cjs simulated    | 100   |
-| ARI (v6, sklearn)  | 1.0   |
-| ARI (v7, sklearn)  | 1.0   |
-| precision (v6, v7) | 1.0   |
-| recall (v6, v7)    | 1.0   |
+- **uniform regime**: every maker runs the *same* default
+  relative-fee policy (the JoinMarket factory default). Fee
+  fingerprints collapse onto a single point in fee space.
+- **varied regime**: makers draw policy parameters
+  $(\mathit{cjfee}_r, \mathit{cjfee}_a, \mathit{txfee},
+  \mathit{minsize})$ from a discrete diversity grid, with a small
+  per-announcement multiplicative jitter (~10%) on the realised
+  fingerprint. This approximates the empirical fee diversity
+  observed in JoinMarket order-book snapshots.
 
-Every maker UTXO is placed in the correct cluster. To stress-test
-v7 we additionally re-ran the simulator with a blinded
-equal-output assignment (the v7 fee-fingerprint step has to
-recover ownership from fees alone, exactly as on mainnet); ARI
-remains 1.0. The simulator therefore measures *both* the state-
-machine logic and the v7 attribution step end-to-end: when the
-corpus is complete, the combined clusterer recovers identity
-exactly.
+We run each regime at 500 makers / 20,000 rounds / 5 batches
+(~100k maker slots / ~20k CJs after deposit and role-switching),
+and report cluster quality under three observation modes:
+
+- **ground-truth mode**: the clusterer sees the simulator's
+  ``equal_output`` ownership labels directly (no fingerprinting
+  needed). This isolates the v6 chain-edge backbone.
+- **blinded mode**: equal-output labels stripped; v7 must recover
+  ownership from fee fingerprints, as on mainnet.
+- **torture mode**: both equal-output and change-output labels
+  stripped; the clusterer has only the fingerprint signal and
+  same-CJ must-not-link.
+
+For each mode we evaluate four gate variants of v7: loose
+(per-CJ univocal under abs OR rel), strict (per-CJ univocal under
+abs AND rel pointing at the same slot), corpus-unique (the
+producer slot's fingerprint is corpus-wide free of doppelgangers),
+and strict + corpus-unique (intersection).
+
+**Varied regime** (final maker count 189 after retirement and
+role-switching, 100,000 maker slots, 100,000 CJs decoded):
+
+| mode                | gate                   | clusters | ARI    | recall proxy | precision-violating clusters |
+|---------------------|------------------------|---------:|-------:|-------------:|-----------------------------:|
+| ground truth        | n/a (full labels)      |      244 | 0.879  | 0.999        |                            0 |
+| blinded             | loose                  |    4,620 | 0.449  | 0.956        |                          136 |
+| blinded             | strict                 |    8,203 | 0.433  | 0.920        |                           98 |
+| blinded             | corpus-unique          |    8,928 | 0.323  | 0.912        |                        **0** |
+| blinded             | strict + corpus-unique |    8,928 | 0.323  | 0.912        |                        **0** |
+| torture             | loose                  |   87,135 | 0.000  | 0.129        |                        5,430 |
+| torture             | strict                 |   98,842 | 0.000  | 0.012        |                          579 |
+| torture             | corpus-unique          |  100,000 | 0.000  | 0.000        |                        **0** |
+| torture             | strict + corpus-unique |  100,000 | 0.000  | 0.000        |                        **0** |
+
+**Uniform regime** (final maker count 717, 100,000 maker slots):
+
+| mode                | gate                   | clusters | ARI    | recall proxy | precision-violating clusters |
+|---------------------|------------------------|---------:|-------:|-------------:|-----------------------------:|
+| ground truth        | n/a                    |      717 | 1.000  | 1.000        |                            0 |
+| blinded             | any                    |      717 | 1.000  | 1.000        |                            0 |
+| torture             | any                    |  100,000 | 0.000  | 0.000        |                            0 |
+
+The precision-violating-cluster count is the number of clusters
+that contain maker slots owned by more than one simulator wallet.
+Recall proxy is $\max(0, 1 - (n_{\text{clusters}} - n_{\text{owners}}) / (n_{\text{slots}} - n_{\text{owners}}))$,
+and ARI is the standard adjusted Rand index against the
+simulator's ownership labels.
+
+Three findings deserve emphasis.
+
+First, in the **uniform regime** the v7 fee-fingerprint gate
+never fires: every maker advertises the same offer, so the
+within-$T$ fingerprint set is constant and no $S_i$ is unique.
+v7 collapses to v6, and v6's chain backbone alone is sufficient
+to recover identity perfectly because the simulator preserves
+chain labels. This is a counterfactual on the fee-policy axis,
+not a recall failure of v7: when fees are uniform, the equal-
+chain attribution is uninformative by construction, and the
+clusterer correctly abstains.
+
+Second, in the **varied regime under the per-CJ loose gate** the
+blinded clusterer produces 136 precision-violating clusters out
+of 4,620 (2.9%). The violations are all driven by the same
+mechanism: per-announcement fee jitter occasionally makes a
+maker's realised fingerprint in producer CJ $T$ coincide
+*numerically* with a different maker's policy, while the true
+producer of the consumed equal output has drifted off the
+consumer's fingerprint. The per-CJ univocal test selects the
+wrong $S_i$ because the right $S_i$ is no longer the unique
+match. The strict gate reduces violations from 136 to 98 (a 28%
+reduction) by demanding that both interpretations agree on the
+same slot, but cannot eliminate them: jitter occasionally aligns
+both abs and rel on the wrong slot.
+
+Third, the **corpus-unique gate eliminates precision violations
+entirely**, at a recall cost of ~5% (ARI 0.449 to 0.323, recall
+proxy 0.956 to 0.912). The mechanism is direct: under jitter, a
+falsely chosen $S_i$ shares its fingerprint with at least one
+other slot somewhere else in the corpus (the true producer, or
+yet another jitter-aligned maker). The corpus-wide doppelganger
+check intercepts exactly these cases. In the torture regime the
+corpus-unique gate produces no edges at all because in the
+absence of chain-edge backbone every fingerprint has many
+candidate doppelgangers; this is the desired behaviour for an
+adversarial setting in which fees alone do not carry attribution
+signal.
+
+The simulator therefore separates two questions that mainnet
+data cannot: (a) is the per-CJ univocal test sound? and (b) does
+the corpus carry enough fingerprint diversity for soundness to
+matter? Under sparse, real-world fee distributions both gates
+report no violations (the corpus-unique gate adds zero corrections
+on mainnet, see \u00a76.2 cross-nick checks at 0 collisions for
+the loose gate); under controlled jitter the per-CJ gate breaks
+while the corpus-unique gate holds. The headline mainnet numbers
+elsewhere in this paper use the loose gate, which is the right
+choice when the empirical violation rate is 0 and recall is
+worth ~5% per gate step; an adversarial-jitter setting should
+prefer the corpus-unique gate.
+
+The exact harness is in
+``tmp/v7/eval_simulator_scaled.py`` and the per-run JSON
+reports under ``tmp/v7/simulator_scaled_*.json``.
 
 ### 6.2 Active probing of real maker wallets
 
@@ -1009,6 +1138,21 @@ follow-up.
   per-CJ commitment scheme that publishes the equal-output owner
   permutation (or a maker's deterministic ordering on the
   network layer) would resolve these residual cases.
+- The per-CJ univocal gate is a *heuristic* under per-announcement
+  fee jitter. The scaled simulator (\u00a76.1) shows that in the
+  varied/blinded regime the loose gate produces 136 multi-owner
+  clusters out of 4,620 (2.9% precision-violating clusters) and
+  the strict variant reduces this to 98 (28% reduction) without
+  eliminating violations. The corpus-unique gate, which requires
+  the chosen producer slot to be free of fingerprint
+  doppelgangers anywhere in the corpus, is the conservative
+  choice that restores precision = 1.0 at a recall cost of ~5%.
+  On the mainnet corpus the cross-nick collision check (\u00a76.2)
+  reports 0 violations under the loose gate, so the empirical
+  precision of all three gates is identical at the current
+  corpus density and the loose gate is the headline default; an
+  adversarial setting (a Sybil deliberately jittering fees to
+  forge edges) should switch to corpus-unique.
 - Cross-CJ CIOH on the off-chain side of the maker wallet is now
   used in two conservative forms: v7.1 unions multiple maker
   change UTXOs co-spent in a non-CJ transaction with at most two
@@ -1083,12 +1227,21 @@ intrinsic to the protocol and to the typical maker wallet
 workflow; they are not a fixable implementation bug.
 
 The precision = 1.0 guarantee is what makes the result
-actionable: the clusterer never merges two distinct maker
-wallets, validated by three independent ground-truth sources.
-Each certified maker the analyst extracts is a *deterministic*
-hide-set reduction, not a probabilistic one. 10.8% of CJs reach
-residual = 1, meaning every maker is certified and only the taker
-remains in the anonymity set.
+actionable: under the per-CJ loose gate the clusterer never
+merges two distinct maker wallets on this corpus, validated by
+three independent ground-truth sources. Each certified maker the
+analyst extracts is a *deterministic* hide-set reduction, not a
+probabilistic one. 10.8% of CJs reach residual = 1, meaning every
+maker is certified and only the taker remains in the anonymity
+set. The precision guarantee is, strictly speaking, gate-and-
+corpus dependent: the scaled simulator (\u00a76.1) shows that
+under adversarial fee jitter the per-CJ gate breaks at ~3% of
+edges and only the corpus-unique gate restores precision = 1.0
+by construction. On the present mainnet snapshot the gates are
+empirically indistinguishable; on a future snapshot in which an
+adversary deliberately concentrates many makers near similar fee
+policies the analyst should switch to the corpus-unique gate at
+a recall cost of about 5%.
 
 The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is not its published $n_{eq}$
