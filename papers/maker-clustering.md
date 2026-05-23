@@ -810,9 +810,34 @@ choice when the empirical violation rate is 0 and recall is
 worth ~5% per gate step; an adversarial-jitter setting should
 prefer the corpus-unique gate.
 
+For completeness we re-ran the gate hierarchy on the mainnet
+corpus (129,301 maker slots from 16,890 ILP-decoded CJs):
+
+| gate                    | clusters | non-trivial | largest | same-CJ violations | cross-nick violations | nicks matched | UTXOs matched |
+|-------------------------|---------:|------------:|--------:|-------------------:|----------------------:|--------------:|--------------:|
+| loose                   |   69,184 |      23,313 |     125 |                  0 |                     0 |        35 / 72 |     40 / 101 |
+| strict                  |   74,051 |      24,274 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
+| corpus-unique           |   74,469 |      24,343 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
+| strict + corpus-unique  |   74,471 |      24,345 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
+
+Moving from loose to corpus-unique splits 5,285 clusters (+7.6%)
+and shrinks the largest cluster from 125 to 91 maker slots. The
+probe-validator outcome is identical across all four gates: 35
+matched nicks, 40 matched UTXOs, 0 cross-nick collisions, 4
+nicks split across 2+ clusters with a maximum of 3 clusters per
+nick. The recall cost of the corpus-unique gate is therefore not
+visible in the probe-set granularity (which samples 72 of an
+unknown total maker population): the 5,285 extra splits happen
+entirely outside the probed nick set. We keep the loose gate as
+the headline default for the rest of the paper but note that on
+this corpus the choice does not affect the probe-validated
+precision result.
+
 The exact harness is in
 ``tmp/v7/eval_simulator_scaled.py`` and the per-run JSON
-reports under ``tmp/v7/simulator_scaled_*.json``.
+reports under ``tmp/v7/simulator_scaled_*.json``. The mainnet
+gate comparison is in ``tmp/v7/mainnet_v7_gates.py`` and
+``tmp/v7/mainnet_v7_probe_gates.py``.
 
 ### 6.2 Active probing of real maker wallets
 
@@ -1147,12 +1172,13 @@ follow-up.
   the chosen producer slot to be free of fingerprint
   doppelgangers anywhere in the corpus, is the conservative
   choice that restores precision = 1.0 at a recall cost of ~5%.
-  On the mainnet corpus the cross-nick collision check (\u00a76.2)
-  reports 0 violations under the loose gate, so the empirical
-  precision of all three gates is identical at the current
-  corpus density and the loose gate is the headline default; an
-  adversarial setting (a Sybil deliberately jittering fees to
-  forge edges) should switch to corpus-unique.
+  On the mainnet corpus the four gates pass the cross-nick check
+  identically (0 violations, same 35/72 matched nicks, same
+  40/101 matched UTXOs); the corpus-unique gate splits 5,285
+  extra clusters but none across a probed nick boundary, so the
+  empirical precision of all gates is identical at the current
+  corpus density. An adversarial setting (a Sybil deliberately
+  jittering fees to forge edges) should switch to corpus-unique.
 - Cross-CJ CIOH on the off-chain side of the maker wallet is now
   used in two conservative forms: v7.1 unions multiple maker
   change UTXOs co-spent in a non-CJ transaction with at most two
