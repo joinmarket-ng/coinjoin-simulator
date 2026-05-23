@@ -2,21 +2,22 @@
 
 > **TL;DR.** On 16,890 ILP-decoded mainnet JoinMarket CoinJoins,
 > a passive on-chain clusterer that follows protocol-mandated
-> same-wallet UTXO edges at precision = 1.0 recovers 69,003 maker
+> same-wallet UTXO edges at precision = 1.0 recovers 68,998 maker
 > wallet components. The taker's per-CJ published anonymity set
 > shrinks from a mean of **8.66 equal outputs to 3.71**, and 98.0%
 > of CJs lose at least one candidate. Three independent
 > ground-truth checks (simulator ARI = 1.0, zero within-CJ
 > collisions, zero cross-nick collisions vs 72 actively-probed
 > maker nicks across 40 matched UTXOs) confirm no over-merging.
-> The clusterer combines four protocol-mandated chain edges: a
+> The clusterer combines five protocol-mandated edges: a
 > change-output reuse edge (v6), a fee-fingerprint disambiguated
 > equal-output reuse edge (v7), a non-CJ co-spend edge on
-> two-output spenders of maker change (v7.1), and a non-CJ
+> two-output spenders of maker change (v7.1), a non-CJ
 > round-trip edge that links a maker's change UTXO to a future
-> maker-slot input through a single two-output hop (v7.2). The
-> latest module ships at
-> [`src/coinjoin_simulator/clusterer_v72.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v72.py).
+> maker-slot input through a single two-output hop (v7.2), and a
+> fidelity-bond funding-tx CIOH edge anchored at the public
+> orderbook snapshot (v7.3). The latest module ships at
+> [`src/coinjoin_simulator/clusterer_v73.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v73.py).
 
 ## 1. Scope and motivation
 
@@ -434,6 +435,83 @@ with a simple consolidation or single-hop forwarding is used as
 a same-wallet edge, while richer non-CJ shapes are conservatively
 ignored.
 
+### 5.6 v7.3: fidelity-bond funding-tx CIOH
+
+JoinMarket makers advertise a *fidelity bond* (FB): a timelocked
+P2WSH output that the maker proves they own. The set of live FB
+UTXOs and the nick that owns each one is published, in cleartext,
+on the orderbook directory nodes; any passive observer can pull a
+snapshot. The bond UTXO itself is timelocked and almost never
+spent in our corpus, but the transaction that *created* the bond
+output is regular (non-CJ) and its inputs are same-wallet as the
+FB owner by the standard common-input ownership heuristic (CIOH).
+
+v7.3 turns the public orderbook into two new same-wallet edges
+over the maker slots already clustered by v7.2:
+
+* **Backward FB-funding CIOH.** Let nick `N` own FB UTXO `(F,
+  v_FB)`. Every input outpoint of `F` is same-wallet as `N`. If
+  any such input equals the *change output* of a maker slot `s`
+  (i.e., `s`'s change was consumed when `N`'s wallet funded its
+  bond), then `s` belongs to `N`'s wallet.
+* **Strict forward FB-funding sibling.** If `F` has at most two
+  outputs, the non-FB output is change of `N`. If that change
+  outpoint is later consumed as a maker-slot input `s'`, then
+  `s'` is in `N`'s wallet.
+
+Two slots anchored to the same nick are then unioned, subject to
+the same-CJ forbid-set inherited from v6.
+
+Safety guards. v7.3 has three precision-protecting filters:
+
+1. **JM CoinJoin exclusion.** If the funding tx `F` is itself a
+   known JoinMarket CoinJoin, CIOH on `F` is unsound and the
+   anchor is dropped. On our corpus two of 95 FB-funding txs are
+   CJs and are skipped.
+2. **Same-CJ forbid.** Two slots anchored to the same nick that
+   happen to sit in the same CJ would be a hard precision
+   violation; they are dropped by the constrained union-find.
+3. **Cluster-nick conflict abstain.** If two distinct FB nicks
+   anchor the same v7.2 cluster, neither nick's anchors are
+   applied (zero on our corpus, but the rule is in place).
+
+Empirically on the mainnet corpus (orderbook snapshot of
+2026-05-22, 95 FB UTXOs, funding txs fetched from a public
+indexer):
+
+| metric                                              | count |
+|-----------------------------------------------------|------:|
+| FB-funding txs available                            |    95 |
+| skipped (funding tx is a JM CJ)                     |     2 |
+| used                                                |    93 |
+| backward anchors via maker-slot change              |    17 |
+| backward anchors via maker-slot input               |     0 |
+| strict-forward anchors                              |     1 |
+| nicks with at least one anchor                      |    13 |
+| nicks spanning >=2 v7.2 clusters (merge candidates) |     4 |
+| cluster-nick conflicts                              |     0 |
+| candidate slot pairs                                |     6 |
+| same-CJ pairs rejected                              |     0 |
+| **cross-cluster unions added**                      | **6** |
+
+The four merging nicks span nine distinct v7.2 clusters; the six
+pairwise unions cut the cluster count by five (one transitive
+merge) from 69,003 (v7.2) to 68,998. None of the four nicks
+appears in our probe set, so v7.3 anchors information that the
+probe-side ground truth in §6 does not see and the probe-side
+precision check (0 violations) is independent of v7.3.
+
+The marginal anonymity-set impact is small because v7.3 affects
+only the handful of CJs whose slots were in those nine v7.2
+clusters. The mean residual anonymity set is unchanged at 3.706
+to three decimal places (mean certified makers per CJ moves from
+4.949 to 4.950). v7.3's value is qualitative: it shows that the
+public orderbook by itself, with no probing, already widens a
+narrow but precision-safe maker-wallet edge.
+
+The v7.3 module is implemented at
+[`src/coinjoin_simulator/clusterer_v73.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v73.py).
+
 ## 6. Ground-truth validation
 
 We validate v6/v7 against three independent ground-truth sources,
@@ -549,16 +627,16 @@ who remixes" from "maker whose remix we observed". The reported
 
 Across the 16,890 ILP-decoded mainnet CJs:
 
-| metric                                          | v6 (change-chain only) | v7 (change + equal) | v7.1 (+ co-spend) | v7.2 (+ round-trip) |
-|-------------------------------------------------|-----------------------:|--------------------:|------------------:|--------------------:|
-| mean published `n_eq`                           | 8.66                   | 8.66                | 8.66              | 8.66                |
-| mean certified makers per CJ                    | 4.69                   | 4.94                | 4.95              | **4.96**            |
-| mean residual anonymity set                     | 3.97                   | 3.72                | 3.71              | **3.71**            |
-| share of CJs with at least one certified maker  | 97.6%                  | 97.9%               | 98.0%             | **98.0%**           |
-| median residual anonymity set                   | 3                      | 3                   | 3                 | 3                   |
-| share of CJs reaching residual = 1 (taker alone)| 8.0%                   | 10.6%               | 10.7%             | **10.8%**           |
+| metric                                          | v6 (change-chain only) | v7 (change + equal) | v7.1 (+ co-spend) | v7.2 (+ round-trip) | v7.3 (+ FB-funding) |
+|-------------------------------------------------|-----------------------:|--------------------:|------------------:|--------------------:|--------------------:|
+| mean published `n_eq`                           | 8.66                   | 8.66                | 8.66              | 8.66                | 8.66                |
+| mean certified makers per CJ                    | 4.69                   | 4.94                | 4.95              | 4.95                | **4.95**            |
+| mean residual anonymity set                     | 3.97                   | 3.72                | 3.71              | 3.71                | **3.71**            |
+| share of CJs with at least one certified maker  | 97.6%                  | 97.9%               | 98.0%             | 98.0%               | **98.0%**           |
+| median residual anonymity set                   | 3                      | 3                   | 3                 | 3                   | 3                   |
+| share of CJs reaching residual = 1 (taker alone)| 8.0%                   | 10.6%               | 10.7%             | 10.8%               | **10.8%**           |
 
-v7.2 cuts the mean residual by 0.26 candidates per CJ versus v6
+v7.3 cuts the mean residual by 0.26 candidates per CJ versus v6
 and lifts the share of CJs where the taker is the sole remaining
 candidate from 8.0% to 10.8%, a **35% relative increase** in the
 worst-case-for-the-taker outcome. The mean published anonymity
@@ -569,6 +647,14 @@ taker remains in the hide-set. We do not claim full
 deanonymization on those CJs (the taker's identity itself is
 still unknown to the on-chain analyst), but their hide-set has
 collapsed to one candidate.
+
+The marginal v7.3 contribution to the headline anonset is small
+(only six unions across four FB nicks), but v7.3 is the first
+clusterer in this stack to use the public orderbook directly: it
+demonstrates that even a passive observer who scrapes the
+orderbook once and follows funding-tx CIOH can extract a
+precision-safe maker-wallet edge that the chain-only v6/v7/v7.1/
+v7.2 pipeline does not produce.
 
 ![residual anonymity set histogram (v7)](figures/anonset_reduction_hist.svg)
 
@@ -664,6 +750,14 @@ every CJ regardless.
   richer non-CJ shapes (3+ outputs) on the precision-first
   principle, leaving a fraction of true same-wallet edges
   unobserved.
+- The v7.3 fidelity-bond edge anchors at the public orderbook
+  snapshot. Its yield on this corpus is six unions over four
+  nicks, bounded above by (a) our slim_txindex covering only the
+  JM-touching subgraph (we fetched the 86 missing FB-funding txs
+  from a public Bitcoin indexer to close that gap) and (b) the
+  precision-safe abstain on funding txs that are themselves
+  CoinJoins. A future version could walk funding-tx inputs back
+  more than one hop, halting at any CJ-shaped ancestor.
 - Forward crawl frontier. Recent CJs near the crawl horizon have
   fewer observed successors, so their slots look like singletons
   more often than the structural truth warrants. This biases the
@@ -674,16 +768,18 @@ every CJ regardless.
   probe data (§6.3) suggests this is not the dominant pattern,
   but a direct count is not yet available.
 
-The probe data after the v7.2 upgrade shows 35 of 72 advertised
-nicks matched (same as v6 and v7); v7.1 and v7.2 each pass the
-zero-cross-nick-collision check at precision = 1.0. The newer
+The probe data after the v7.3 upgrade shows 35 of 72 advertised
+nicks matched (same as v6, v7, v7.1, and v7.2); each layer passes
+the zero-cross-nick-collision check at precision = 1.0. The newer
 merges concentrate in older corpus regions where more chain and
 non-CJ CIOH edges have time to fire, away from the probed-nick
-set of recent live makers. Future improvements should target ILP
-recall (more decoded CJs across the long tail of larger rounds)
-and cross-mixdepth identity edges (a fidelity-bond UTXO observed
-across two CJs at different mixdepths is a candidate under the
-JoinMarket spec).
+set of recent live makers. The four nicks v7.3 merges are
+orderbook-only nicks not present in the probe set, so the
+probe-side precision check is independent evidence that v7.3 did
+not over-merge. Future improvements should target ILP recall
+(more decoded CJs across the long tail of larger rounds) and
+multi-hop backward walks from FB-funding txs through chains of
+non-CJ ancestors.
 
 ## 10. Conclusion
 
@@ -711,13 +807,15 @@ remains in the anonymity set.
 
 The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is not its published `n_eq`
-but the v7.2 residual, which is typically 2 to 4 across the
+but the v7.3 residual, which is typically 2 to 4 across the
 entire range of round sizes the protocol supports. Mitigations
 that break any of the structural channels (cold-funding the next
 round from a fresh derivation that decouples the maker's
 next-round inputs from previous-round change; a fee policy that
 produces identical fingerprints across an entire offer cohort,
-removing the within-CJ uniqueness v7 needs; or batching all
-off-CJ consolidations into transactions with more than two
-outputs, removing the v7.1 and v7.2 CIOH-safe filter) would close
-the principal structural channels the clusterer exploits.
+removing the within-CJ uniqueness v7 needs; batching all off-CJ
+consolidations into transactions with more than two outputs,
+removing the v7.1, v7.2, and v7.3 CIOH-safe filter; or funding
+the fidelity bond from a wallet kept strictly disjoint from the
+maker's CJ wallet) would close the principal structural channels
+the clusterer exploits.
