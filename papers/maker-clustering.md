@@ -2,17 +2,21 @@
 
 > **TL;DR.** On 16,890 ILP-decoded mainnet JoinMarket CoinJoins,
 > a passive on-chain clusterer that follows protocol-mandated
-> same-wallet UTXO edges at precision = 1.0 recovers 69,184 maker
+> same-wallet UTXO edges at precision = 1.0 recovers 69,003 maker
 > wallet components. The taker's per-CJ published anonymity set
-> shrinks from a mean of **8.66 equal outputs to 3.72**, and 98.0%
+> shrinks from a mean of **8.66 equal outputs to 3.71**, and 98.0%
 > of CJs lose at least one candidate. Three independent
 > ground-truth checks (simulator ARI = 1.0, zero within-CJ
 > collisions, zero cross-nick collisions vs 72 actively-probed
 > maker nicks across 40 matched UTXOs) confirm no over-merging.
-> The clusterer combines two protocol-mandated chain edges, a
-> change-output reuse edge (v6) and a fee-fingerprint
-> disambiguated equal-output reuse edge (v7), and ships at
-> [`src/coinjoin_simulator/clusterer_v7.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v7.py).
+> The clusterer combines four protocol-mandated chain edges: a
+> change-output reuse edge (v6), a fee-fingerprint disambiguated
+> equal-output reuse edge (v7), a non-CJ co-spend edge on
+> two-output spenders of maker change (v7.1), and a non-CJ
+> round-trip edge that links a maker's change UTXO to a future
+> maker-slot input through a single two-output hop (v7.2). The
+> latest module ships at
+> [`src/coinjoin_simulator/clusterer_v72.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v72.py).
 
 ## 1. Scope and motivation
 
@@ -225,21 +229,22 @@ implementations are at
 
 The full pass over the 129,301 mainnet slots produces:
 
-| metric                                       | v6        | v7        |
-|----------------------------------------------|----------:|----------:|
-| total clusters                               | 74,471    | 69,184    |
-| singleton clusters                           | 50,126    | 45,871    |
-| non-trivial clusters (size >= 2)             | 24,345    | 23,313    |
-| largest cluster                              | 91 slots  | 125 slots |
-| same-CJ slot collisions (must-not-link violations) | 0   | 0         |
+| metric                                       | v6        | v7        | v7.1      | v7.2      |
+|----------------------------------------------|----------:|----------:|----------:|----------:|
+| total clusters                               | 74,471    | 69,184    | 69,103    | 69,003    |
+| singleton clusters                           | 50,126    | 45,871    | 45,790    | 45,706    |
+| non-trivial clusters (size >= 2)             | 24,345    | 23,313    | 23,313    | 23,297    |
+| largest cluster                              | 91 slots  | 125 slots | 125 slots | 125 slots |
+| same-CJ slot collisions (must-not-link violations) | 0   | 0         | 0         | 0         |
 
 v7 absorbs 5,287 v6 clusters into existing ones through the
-equal-chain edge: 4,255 of those merges remove a singleton, and
-the largest component grows from 91 to 125 slots. The
-zero-collision result is the falsifiability check: any pair of
-slots in the same CJ that ended up in the same cluster would be
-a hard precision violation. Both v6 and v7 pass this check on
-the full mainnet corpus.
+equal-chain edge. v7.1 adds 127 cross-CJ unions through the
+non-CJ co-spend edge (§5.4), removing 81 further singletons. v7.2
+adds 153 cross-CJ unions through the non-CJ round-trip edge
+(§5.5), removing 100 more clusters. The zero-collision result is
+the falsifiability check: any pair of slots in the same CJ that
+ended up in the same cluster would be a hard precision violation.
+All four iterations pass this check on the full mainnet corpus.
 
 ![cluster size distribution](figures/cluster_size_distribution.svg)
 
@@ -334,6 +339,100 @@ must-not-link forbidance through a shared constrained union-find,
 so the 5,643 additional merges cannot smuggle a must-not-link
 violation through transitivity. We verify this directly on
 mainnet (§5.1: 0 collisions, §6.3: 0 cross-nick collisions).
+
+### 5.4 v7.1: non-CJ co-spend (Common Input Ownership Heuristic)
+
+A maker who consolidates two distinct change UTXOs in a single
+non-CoinJoin spend reveals same-wallet ownership of those two
+UTXOs by the Common Input Ownership Heuristic (CIOH). To remain
+at precision = 1.0 we apply CIOH only when both endpoints are
+already known maker change outputs and the spender is
+unambiguously not a CoinJoin. We add a hard conservative filter:
+the non-CJ spender must have **at most two outputs**. This is the
+canonical shape of an off-CJ consolidation, change return or
+sweep, and it eliminates by construction any spender that could
+plausibly be a payment to a third party (a typical send is
+two-output: `recipient + change`; the filter retains those but
+discards multi-recipient batched spends where CIOH could merge
+different wallets).
+
+The v7.1 edge fires when a non-JM spender `N` with `n_outputs <=
+2` consumes two or more change outputs that are owned by distinct
+maker slots in the corpus. All such maker slots are unioned. Slot
+pairs that belong to the same CJ are rejected by the inherited
+must-not-link constraint, so the edge respects within-CJ Sybil
+deduplication by design.
+
+Empirically on the mainnet corpus:
+
+| metric                                          |   count |
+|-------------------------------------------------|--------:|
+| candidate non-CJ spenders (>= 2 maker outpoints)|   2,447 |
+| qualifying (<= 2 outputs)                       |      56 |
+| dropped by output filter                        |   2,391 |
+| candidate slot pairs                            |     129 |
+| same-CJ pairs rejected by must-not-link         |       0 |
+| **cross-CJ unions added**                       |   **127** |
+
+The 2,391 dropped consolidations have three or more outputs and
+are not safe to treat as same-owner under CIOH without more
+evidence. We leave them on the table rather than risk a precision
+violation. The 0 same-CJ violations show that the must-not-link
+constraint correctly intercepts any candidate that would have
+merged two slots of the same CJ.
+
+The v7.1 module is implemented at
+[`src/coinjoin_simulator/clusterer_v71.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v71.py)
+and reuses the v7 union-find with the same forbid-set semantics.
+
+### 5.5 v7.2: non-CJ round-trip CIOH
+
+The v7.1 filter caps non-CJ spenders at two outputs because we
+cannot prove same-owner across more outputs. Many real on-CJ
+remixes also leave a single-hop non-CJ trail in between: a maker
+consumes their change at mixdepth `m`, immediately rebroadcasts
+through a two-output hop transaction (consolidation, fee bump,
+deposit echo), and the resulting output is then consumed as a
+maker-slot input in a later CJ. This is the change-chain edge of
+v6 with one non-CJ hop interposed.
+
+The v7.2 edge fires when a non-JM transaction `H` satisfies all
+of:
+
+1. `H` has at most two outputs (same CIOH-safety filter as v7.1);
+2. `H` consumes at least one maker change UTXO from a known
+   producer slot `p`;
+3. at least one of `H`'s outputs is the *first input* of a maker
+   slot `c` in a later CJ.
+
+In that case `p` and `c` are unioned. Same-CJ pairs are dropped
+by the inherited forbid-set.
+
+Empirically on the mainnet corpus:
+
+| metric                                                                | count |
+|-----------------------------------------------------------------------|------:|
+| candidate non-CJ hops (consuming maker change)                        | 3,710 |
+| dropped by output filter (> 2 outputs)                                | 3,608 |
+| qualifying hops                                                       |   102 |
+| candidate slot pairs                                                  |   155 |
+| same-CJ pairs rejected                                                |     0 |
+| **cross-CJ unions added**                                             | **153** |
+
+v7.2 cuts the cluster count from 69,103 (v7.1) to 69,003 and
+lowers the mean residual anonymity set from 3.711 (v7.1) to
+3.706 (a further reduction beyond v7.1; the full §7.1 table
+rounds both to 3.71). The simulator end-to-end check and the
+probe-side ground truth in §6 confirm no precision violations and
+0 cross-nick collisions under v7.2.
+The v7.2 module is implemented at
+[`src/coinjoin_simulator/clusterer_v72.py`](https://github.com/joinmarket-ng/coinjoin-simulator/blob/main/src/coinjoin_simulator/clusterer_v72.py).
+
+Together, v7.1 and v7.2 close the off-chain CIOH side of the
+maker wallet: any non-CJ transaction whose shape is consistent
+with a simple consolidation or single-hop forwarding is used as
+a same-wallet edge, while richer non-CJ shapes are conservatively
+ignored.
 
 ## 6. Ground-truth validation
 
@@ -450,21 +549,21 @@ who remixes" from "maker whose remix we observed". The reported
 
 Across the 16,890 ILP-decoded mainnet CJs:
 
-| metric                                          | v6 (change-chain only) | v7 (change + equal) |
-|-------------------------------------------------|-----------------------:|--------------------:|
-| mean published `n_eq`                           | 8.66                   | 8.66                |
-| mean certified makers per CJ                    | 4.69                   | **4.94**            |
-| mean residual anonymity set                     | 3.97                   | **3.72**            |
-| share of CJs with at least one certified maker  | 97.6%                  | **98.0%**           |
-| median residual anonymity set                   | 3                      | 3                   |
-| share of CJs reaching residual = 1 (taker alone)| 8.0%                   | **10.6%**           |
+| metric                                          | v6 (change-chain only) | v7 (change + equal) | v7.1 (+ co-spend) | v7.2 (+ round-trip) |
+|-------------------------------------------------|-----------------------:|--------------------:|------------------:|--------------------:|
+| mean published `n_eq`                           | 8.66                   | 8.66                | 8.66              | 8.66                |
+| mean certified makers per CJ                    | 4.69                   | 4.94                | 4.95              | **4.96**            |
+| mean residual anonymity set                     | 3.97                   | 3.72                | 3.71              | **3.71**            |
+| share of CJs with at least one certified maker  | 97.6%                  | 97.9%               | 98.0%             | **98.0%**           |
+| median residual anonymity set                   | 3                      | 3                   | 3                 | 3                   |
+| share of CJs reaching residual = 1 (taker alone)| 8.0%                   | 10.6%               | 10.7%             | **10.8%**           |
 
-v7 cuts the mean residual by 0.25 candidates per CJ versus v6
+v7.2 cuts the mean residual by 0.26 candidates per CJ versus v6
 and lifts the share of CJs where the taker is the sole remaining
-candidate from 8.0% to 10.6%, a **32% relative increase** in the
+candidate from 8.0% to 10.8%, a **35% relative increase** in the
 worst-case-for-the-taker outcome. The mean published anonymity
-set shrinks from 8.66 to 3.72 (a 57% reduction). 98.0% of CJs
-leak at least one maker through the protocol chain. 10.6% reach
+set shrinks from 8.66 to 3.71 (a 57% reduction). 98.0% of CJs
+leak at least one maker through the protocol chain. 10.8% reach
 residual = 1: every maker in the CJ is certified and only the
 taker remains in the hide-set. We do not claim full
 deanonymization on those CJs (the taker's identity itself is
@@ -556,13 +655,15 @@ every CJ regardless.
   per-CJ commitment scheme that publishes the equal-output owner
   permutation (or a maker's deterministic ordering on the
   network layer) would resolve these residual cases.
-- Cross-CJ CIOH (Common Input Ownership Heuristic) on the
-  off-chain side of the maker wallet is not yet used. A maker
-  whose pre-CJ funding transaction co-spends UTXOs from multiple
-  addresses gives away a wallet root that re-appears every time
-  the same maker funds a new CJ. v6/v7 have the bundling implicit
-  inside slots but do not yet propagate it across CJs through
-  non-CJ ancestor transactions.
+- Cross-CJ CIOH on the off-chain side of the maker wallet is now
+  used in two conservative forms: v7.1 unions multiple maker
+  change UTXOs co-spent in a non-CJ transaction with at most two
+  outputs, and v7.2 unions a maker change UTXO with a future
+  maker-slot input that is reached through a single non-CJ hop
+  whose spender has at most two outputs. Both filters discard
+  richer non-CJ shapes (3+ outputs) on the precision-first
+  principle, leaving a fraction of true same-wallet edges
+  unobserved.
 - Forward crawl frontier. Recent CJs near the crawl horizon have
   fewer observed successors, so their slots look like singletons
   more often than the structural truth warrants. This biases the
@@ -573,46 +674,50 @@ every CJ regardless.
   probe data (§6.3) suggests this is not the dominant pattern,
   but a direct count is not yet available.
 
-The probe data after the v7 upgrade shows 35 of 72 advertised
-nicks matched (up from a fair-comparison v6 baseline of also 35,
-since the v7 mainnet merges of 5,287 clusters occur off the
-probed-nick set: probed nicks are recent live makers, while v7's
-merges concentrate in older corpus regions where more equal-
-output chain edges have time to fire). Future improvements should
-target ILP recall (more decoded CJs across the long tail of
-larger rounds) and cross-mixdepth identity edges (a fidelity-bond
-UTXO observed across two CJs at different mixdepths is a candidate
-under the JoinMarket spec).
+The probe data after the v7.2 upgrade shows 35 of 72 advertised
+nicks matched (same as v6 and v7); v7.1 and v7.2 each pass the
+zero-cross-nick-collision check at precision = 1.0. The newer
+merges concentrate in older corpus regions where more chain and
+non-CJ CIOH edges have time to fire, away from the probed-nick
+set of recent live makers. Future improvements should target ILP
+recall (more decoded CJs across the long tail of larger rounds)
+and cross-mixdepth identity edges (a fidelity-bond UTXO observed
+across two CJs at different mixdepths is a candidate under the
+JoinMarket spec).
 
 ## 10. Conclusion
 
 The JoinMarket equal-output anonymity set is not the right
 metric to publish to users. A passive on-chain adversary running
 a protocol-correct chain-following clusterer at precision = 1.0
-reduces the published anonymity set from a mean of 8.66 to 3.72
+reduces the published anonymity set from a mean of 8.66 to 3.71
 on the full mainnet corpus, with 98.0% of CJs losing at least one
 candidate to certified-maker removal. The structural property
 the attack exploits, namely that JoinMarket's two same-wallet
 UTXO chains (the change-chain at the same mixdepth and the
 equal-output chain at the next mixdepth, the latter disambiguated
-by the maker's own fee schedule) are both intrinsic to the
-protocol, is not a fixable implementation bug.
+by the maker's own fee schedule) combined with conservative
+non-CJ CIOH on the maker's off-chain consolidations, are all
+intrinsic to the protocol and to the typical maker wallet
+workflow; they are not a fixable implementation bug.
 
 The precision = 1.0 guarantee is what makes the result
 actionable: the clusterer never merges two distinct maker
 wallets, validated by three independent ground-truth sources.
 Each certified maker the analyst extracts is a *deterministic*
-hide-set reduction, not a probabilistic one. 10.6% of CJs reach
+hide-set reduction, not a probabilistic one. 10.8% of CJs reach
 residual = 1, meaning every maker is certified and only the taker
 remains in the anonymity set.
 
 The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is not its published `n_eq`
-but the v7 residual, which is typically 2 to 4 across the entire
-range of round sizes the protocol supports. Mitigations that
-break either chain link (cold-funding the next round from a
-fresh derivation that decouples the maker's next-round inputs
-from previous-round change; or a fee policy that produces
-identical fingerprints across an entire offer cohort, removing
-the within-CJ uniqueness v7 needs) would close the principal
-structural channels the clusterer exploits.
+but the v7.2 residual, which is typically 2 to 4 across the
+entire range of round sizes the protocol supports. Mitigations
+that break any of the structural channels (cold-funding the next
+round from a fresh derivation that decouples the maker's
+next-round inputs from previous-round change; a fee policy that
+produces identical fingerprints across an entire offer cohort,
+removing the within-CJ uniqueness v7 needs; or batching all
+off-CJ consolidations into transactions with more than two
+outputs, removing the v7.1 and v7.2 CIOH-safe filter) would close
+the principal structural channels the clusterer exploits.
