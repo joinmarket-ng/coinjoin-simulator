@@ -344,13 +344,13 @@ def _md_to_html(md: str) -> str:
 
 
 def _load_kpis() -> dict[str, Any]:
-    """Pull live numbers from the v7 reports (best-effort).
+    """Pull live numbers from the v7.2 reports (best-effort).
 
     Headline framing: maker-wallet clustering + taker anonymity-set
-    reduction under the v7 chain-edge clusterer (change-chain plus
-    fee-fingerprint equal-chain, precision = 1.0 by construction,
-    validated by simulator ARI, within-CJ sybil-dedup, and probing
-    ground truth).
+    reduction under the v7.2 chain-edge clusterer (change-chain plus
+    fee-fingerprint equal-chain plus conservative non-CJ CIOH,
+    precision = 1.0 by construction, validated by simulator ARI,
+    within-CJ sybil-dedup, and probing ground truth).
     """
     kpis: dict[str, Any] = {
         "n_corpus_txs": None,
@@ -373,8 +373,8 @@ def _load_kpis() -> dict[str, Any]:
         "probe_nicks_matched": None,
         "probe_cross_nick_collisions": None,
     }
-    # v7 cluster report
-    v7_report_p = TMP / "v7" / "mainnet_v7_report.json"
+    # v7.2 cluster report
+    v7_report_p = TMP / "v7" / "mainnet_v72_report.json"
     if v7_report_p.exists():
         s = json.loads(v7_report_p.read_text())
         kpis["n_decoded_txs"] = s.get("n_ok_records")
@@ -389,8 +389,8 @@ def _load_kpis() -> dict[str, Any]:
         kpis["largest_cluster"] = s.get("largest_cluster_size")
         kpis["n_same_cj_collisions"] = s.get("same_cj_collisions", 0)
 
-    # Anonymity-set reduction (v7 headline)
-    anon_p = TMP / "v7" / "anonset_reduction_v7.json"
+    # Anonymity-set reduction (v7.2 headline)
+    anon_p = TMP / "v7" / "anonset_reduction_v72.json"
     if anon_p.exists():
         a = json.loads(anon_p.read_text())
         kpis["n_analysed"] = a.get("n_cjs_analyzed")
@@ -411,12 +411,12 @@ def _load_kpis() -> dict[str, Any]:
                     kpis["median_residual"] = k
                     break
 
-    # Probe-attack validation (v7 ground truth)
-    probe_p = TMP / "v7" / "probe_validation_v7.json"
+    # Probe-attack validation (v7.2 ground truth)
+    probe_p = TMP / "v7" / "probe_validation_v72.json"
     if probe_p.exists():
         p = json.loads(probe_p.read_text())
         kpis["probe_nicks_total"] = p.get("n_nicks")
-        kpis["probe_nicks_matched"] = p.get("n_nicks_with_any_v7_match")
+        kpis["probe_nicks_matched"] = p.get("n_nicks_with_any_v72_match")
         kpis["probe_cross_nick_collisions"] = p.get("precision_violations_clusters", 0)
 
     # Probing study KPIs (from pinned study data files)
@@ -595,14 +595,14 @@ codebases.</p>
 <p>A passive on-chain adversary clusters JoinMarket maker wallets
 through protocol-mandated mixdepth-rotating change outputs, at
 precision = 1.0 by construction. On the full mainnet corpus
-({n_txs:,} JM CoinJoins, {n_decoded:,} ILP-decoded), the v7
-clusterer (change-chain + fee-fingerprint equal-chain) recovers
-{n_clusters:,} certified wallet components. Each certified maker
-shrinks the taker's per-CJ anonymity set.</p>
+({n_txs:,} JM CoinJoins, {n_decoded:,} ILP-decoded), the v7.2
+clusterer (change-chain + fee-fingerprint equal-chain + non-CJ
+CIOH) recovers {n_clusters:,} certified wallet components. Each
+certified maker shrinks the taker's per-CJ anonymity set.</p>
 <div class="kpis">
-  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v7 residual)</span></div>
+  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v7.2 residual)</span></div>
   <div class="kpi danger"><b>{share_any:.1f}%</b><span>CJs where at least one maker is certified</span></div>
-  <div class="kpi"><b>{n_clusters:,}</b><span>v7 maker clusters ({n_nontrivial:,} non-trivial)</span></div>
+  <div class="kpi"><b>{n_clusters:,}</b><span>v7.2 maker clusters ({n_nontrivial:,} non-trivial)</span></div>
   <div class="kpi safe"><b>{n_collisions}</b><span>Same-CJ precision violations (out of {n_decoded:,} CJs)</span></div>
 </div>
 <p><a href="mainnet-deanon.html">&rarr; full study</a></p>
@@ -645,16 +645,16 @@ def build_deanon_page(kpis: dict[str, Any]) -> str:
 
     kpi_card = f"""
 <h1>JoinMarket Maker Clustering and Taker Anonymity-Set Reduction</h1>
-<p><em>May 2026 (coinjoin-simulator + joinmarket-analyzer, v7 clusterer)</em></p>
+<p><em>May 2026 (coinjoin-simulator + joinmarket-analyzer, v7.2 clusterer)</em></p>
 <div class="kpis">
   <div class="kpi"><b>{n_txs:,}</b><span>JM CoinJoin txs in corpus ({n_decoded:,} ILP-decoded)</span></div>
   <div class="kpi"><b>{n_slots:,}</b><span>Maker slots recovered</span></div>
-  <div class="kpi"><b>{n_clusters:,}</b><span>v7 clusters ({n_nontrivial:,} non-trivial, largest {largest})</span></div>
+  <div class="kpi"><b>{n_clusters:,}</b><span>v7.2 clusters ({n_nontrivial:,} non-trivial, largest {largest})</span></div>
   <div class="kpi safe"><b>{n_collisions}</b><span>Same-CJ precision violations (out of {n_decoded:,})</span></div>
-  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v7 residual)</span></div>
+  <div class="kpi"><b>{mean_n_eq:.2f} &rarr; {mean_residual:.2f}</b><span>Mean taker anonymity set (published &rarr; v7.2 residual)</span></div>
   <div class="kpi danger"><b>{share_any:.1f}%</b><span>CJs where at least one maker is certified</span></div>
   <div class="kpi"><b>{median_residual_s}</b><span>Median residual anonymity set ({share_all:.1f}% reach residual = 1, taker alone)</span></div>
-  <div class="kpi safe"><b>{probe_collisions} / {probe_matched}</b><span>Cross-nick collisions / probed nicks with v7 matches (of {probe_total} probed)</span></div>
+  <div class="kpi safe"><b>{probe_collisions} / {probe_matched}</b><span>Cross-nick collisions / probed nicks with v7.2 matches (of {probe_total} probed)</span></div>
 </div>
 """
     body = kpi_card + body_md

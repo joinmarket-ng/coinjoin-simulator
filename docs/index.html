@@ -95,14 +95,14 @@ codebases.</p>
 <p>A passive on-chain adversary clusters JoinMarket maker wallets
 through protocol-mandated mixdepth-rotating change outputs, at
 precision = 1.0 by construction. On the full mainnet corpus
-(23,876 JM CoinJoins, 16,890 ILP-decoded), the v7
-clusterer (change-chain + fee-fingerprint equal-chain) recovers
-69,184 certified wallet components. Each certified maker
-shrinks the taker's per-CJ anonymity set.</p>
+(23,876 JM CoinJoins, 16,890 ILP-decoded), the v7.2
+clusterer (change-chain + fee-fingerprint equal-chain + non-CJ
+CIOH) recovers 69,003 certified wallet components. Each
+certified maker shrinks the taker's per-CJ anonymity set.</p>
 <div class="kpis">
-  <div class="kpi"><b>8.65 &rarr; 3.72</b><span>Mean taker anonymity set (published &rarr; v7 residual)</span></div>
+  <div class="kpi"><b>8.65 &rarr; 3.71</b><span>Mean taker anonymity set (published &rarr; v7.2 residual)</span></div>
   <div class="kpi danger"><b>98.0%</b><span>CJs where at least one maker is certified</span></div>
-  <div class="kpi"><b>69,184</b><span>v7 maker clusters (23,313 non-trivial)</span></div>
+  <div class="kpi"><b>69,003</b><span>v7.2 maker clusters (23,297 non-trivial)</span></div>
   <div class="kpi safe"><b>0</b><span>Same-CJ precision violations (out of 16,890 CJs)</span></div>
 </div>
 <p><a href="mainnet-deanon.html">&rarr; full study</a></p>
