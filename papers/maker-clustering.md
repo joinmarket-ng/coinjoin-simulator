@@ -142,27 +142,51 @@ construction.
 ### 3.1 Worked example
 
 A two-maker CJ at amount 1,000,000 sats with one taker and makers
-`A`, `B` looks like:
+`A`, `B`. Each maker charges a CoinJoin fee of 1,000 sats; the
+miner fee for the whole transaction is 4,000 sats and is paid in
+full by the taker (default JoinMarket policy: `txfee = 0` for
+each maker offer):
 
 ```
-inputs:
-  taker:   2,400,000 (one UTXO from any source)
-  A:       1,050,000 (from A's mixdepth 1)
-  B:         950,000 + 80,000 (two UTXOs, both from B's mixdepth 0)
+inputs (total 4,480,000):
+  taker:   2,400,000  (one UTXO from any source)
+  A:       1,050,000  (one UTXO from A's mixdepth 1)
+  B:         950,000 + 80,000  (two UTXOs, both from B's mixdepth 0)
 
-outputs:
-  equal: 1,000,000 (three of them: taker, A, B in unknown order)
-  change(taker):   1,398,000 (taker fee paid)
-  change(A):          48,000 (back to A's mixdepth 1)
-  change(B):          28,000 (back to B's mixdepth 0)
+outputs (total 4,476,000; miner fee = 4,000):
+  equal: 1,000,000      (three of them: taker, A, B in unknown order)
+  change(taker):  1,394,000  = 2,400,000 - 1,000,000 - 2*1,000 - 4,000
+  change(A):         51,000  = 1,050,000 - 1,000,000 + 1,000
+  change(B):         31,000  = 1,030,000 - 1,000,000 + 1,000
 ```
+
+Cashflow per participant (counting only what each wallet sees;
+the equal outputs are 1,000,000 each, owned by their respective
+participants):
+
+- **Taker**: pays 2 * 1,000 (maker fees) + 4,000 (miner fee) =
+  **6,000 sats net cost** for the mix.
+- **Maker A**: receives a 1,000,000 equal output and a 51,000
+  change output for a total of 1,051,000 against 1,050,000
+  inputs, **earning +1,000 sats**.
+- **Maker B**: receives a 1,000,000 equal output and a 31,000
+  change output for a total of 1,031,000 against 1,030,000
+  inputs, **earning +1,000 sats**.
+- **Miner**: receives 4,000 sats.
+
+The taker funds both maker payouts and the miner fee; the makers
+are paid for providing liquidity. Negative cashflow for a maker
+would only occur if a misconfigured offer set a negative cjfee,
+which JoinMarket clients reject at orderbook-load time.
 
 The ILP decomposition tells us which subset of inputs and which
 change output each participant contributed; it cannot tell which
-of the three equal-amount outputs is whose. The change observation
-for `A` will reappear as an input in some future CJ where `A`
-again advertises mixdepth 1; that future CJ is the chain edge
-that v6 walks. The same applies to `B`'s change in mixdepth 0.
+of the three equal-amount outputs is whose (the equal outputs are
+indistinguishable on-chain by amount alone). The change output
+for `A` (51,000 sats in mixdepth 1) will reappear as an input in
+some future CJ where `A` again advertises mixdepth 1; that future
+CJ is the chain edge that v6 walks. The same applies to `B`'s
+change in mixdepth 0.
 
 ## 4. Mainnet corpus
 
@@ -230,29 +254,33 @@ implementations are at
 
 The full pass over the 129,301 mainnet slots produces:
 
-| metric                                       | v6        | v7        | v7.1      | v7.2      |
-|----------------------------------------------|----------:|----------:|----------:|----------:|
-| total clusters                               | 74,471    | 69,184    | 69,103    | 69,003    |
-| singleton clusters                           | 50,126    | 45,871    | 45,790    | 45,706    |
-| non-trivial clusters (size >= 2)             | 24,345    | 23,313    | 23,313    | 23,297    |
-| largest cluster                              | 91 slots  | 125 slots | 125 slots | 125 slots |
-| same-CJ slot collisions (must-not-link violations) | 0   | 0         | 0         | 0         |
+| metric                                       | v6        | v7        | v7.1      | v7.2      | v7.3      |
+|----------------------------------------------|----------:|----------:|----------:|----------:|----------:|
+| total clusters                               | 74,471    | 69,184    | 69,103    | 69,003    | 68,998    |
+| singleton clusters                           | 50,126    | 45,871    | 45,790    | 45,706    | 45,702    |
+| non-trivial clusters (size >= 2)             | 24,345    | 23,313    | 23,313    | 23,297    | 23,296    |
+| largest cluster                              | 91 slots  | 125 slots | 125 slots | 125 slots | 125 slots |
+| same-CJ slot collisions (must-not-link violations) | 0   | 0         | 0         | 0         | 0         |
 
 v7 absorbs 5,287 v6 clusters into existing ones through the
 equal-chain edge. v7.1 adds 127 cross-CJ unions through the
 non-CJ co-spend edge (§5.4), removing 81 further singletons. v7.2
 adds 153 cross-CJ unions through the non-CJ round-trip edge
-(§5.5), removing 100 more clusters. The zero-collision result is
-the falsifiability check: any pair of slots in the same CJ that
-ended up in the same cluster would be a hard precision violation.
-All four iterations pass this check on the full mainnet corpus.
+(§5.5), removing 100 more clusters. v7.3 adds 6 cross-cluster
+unions through the fidelity-bond funding-tx CIOH edge (§5.6),
+collapsing 9 v7.2 components into 4 (a net reduction of 5
+clusters). The zero-collision result is the falsifiability check:
+any pair of slots in the same CJ that ended up in the same
+cluster would be a hard precision violation. All five iterations
+pass this check on the full mainnet corpus.
 
 ![cluster size distribution](figures/cluster_size_distribution.svg)
 
-The v7 histogram is heavy-tailed but bounded: the largest cluster
-contains 125 slots, the 99th percentile is 9, and the median
-non-trivial cluster has 3. There is no cluster of "thousands of
-slots", which would be the signature of an over-merge.
+The v7.3 histogram is heavy-tailed but bounded: the largest
+cluster contains 125 slots, the 99th percentile is 9, and the
+median non-trivial cluster has 3. There is no cluster of
+"thousands of slots", which would be the signature of an
+over-merge.
 
 ### 5.2 What goes wrong without these constraints
 
@@ -514,9 +542,9 @@ The v7.3 module is implemented at
 
 ## 6. Ground-truth validation
 
-We validate v6/v7 against three independent ground-truth sources,
-all of which a passive on-chain analyst would *not* have but
-which we can construct here.
+We validate the clusterer (v6 through v7.3) against three
+independent ground-truth sources, all of which a passive on-chain
+analyst would *not* have but which we can construct here.
 
 ### 6.1 Simulator end-to-end (perfect labels)
 
@@ -549,9 +577,9 @@ The must-not-link constraint is the strongest structural precision
 check on mainnet: if any pair of slots from the same CJ ends up in
 the same cluster, the clusterer has falsified one of its own
 assumptions. On the 16,890 decoded mainnet CJs there are zero
-such collisions for *both* v6 and v7 (§5.1). This is a hard upper
-bound on the precision violation rate (it is not a recall
-statement).
+such collisions across all five iterations (v6 through v7.3,
+see §5.1). This is a hard upper bound on the precision violation
+rate (it is not a recall statement).
 
 ### 6.3 Active probing of real maker wallets
 
@@ -570,35 +598,39 @@ same nick in the same probe round come from the **same mixdepth
 of the same wallet**. This is the property §6.3 uses both to
 confirm precision and to look for missed edges.
 
-| metric                                       | v6         | v7         |
-|----------------------------------------------|-----------:|-----------:|
-| nicks probed                                 | 72         | 72         |
-| nicks with at least one match                | 35         | 35         |
-| offered UTXOs                                | 101        | 101        |
-| offered UTXOs found in a cluster             | 40         | 40         |
-| **cross-nick collisions in any cluster**     | **0**      | **0**      |
+| metric                                       | v6   | v7   | v7.1 | v7.2 | v7.3 |
+|----------------------------------------------|-----:|-----:|-----:|-----:|-----:|
+| nicks probed                                 | 72   | 72   | 72   | 72   | 72   |
+| nicks with at least one match                | 16   | 35   | 35   | 35   | 35   |
+| offered UTXOs                                | 101  | 101  | 101  | 101  | 101  |
+| offered UTXOs found in a cluster             | 19   | 40   | 40   | 40   | 40   |
+| **cross-nick collisions in any cluster**     | **0**| **0**| **0**| **0**| **0**|
 
 ![probe validation card](figures/probe_validation_v6.svg)
 
 The pass-or-fail check: for every pair of distinct probed nicks
 `(A, B)`, no cluster contains a UTXO of `A` and a UTXO of `B`.
-We observe **zero** such cross-nick collisions under both v6 and
-v7. The clusterer never merged two real JoinMarket maker wallets
-into one component on this corpus. Every nick whose UTXOs appear
-in the cluster set has all of them in the same cluster, or in
-several clusters that all belong to that nick.
+We observe **zero** such cross-nick collisions under all five
+clusterer iterations. The clusterer never merged two real
+JoinMarket maker wallets into one component on this corpus.
+Every nick whose UTXOs appear in the cluster set has all of them
+in the same cluster, or in several clusters that all belong to
+that nick.
 
-The probe data also constrains the *recall direction*: the probe
-matched 35 of 72 advertised nicks; the unmatched 37 nicks
+The probe data also constrains the *recall direction*: under
+v7.3, the probe matched 35 of 72 advertised nicks across 40 of
+101 advertised UTXOs (v6 alone matched 16 nicks across 19 UTXOs;
+v7's equal-chain edge extends recall by linking probe-advertised
+equal outputs to the chain). The unmatched 37 nicks
 contributed UTXOs that were never observed entering a JM CJ in
 our corpus (cold-storage parts of the wallet, recent deposits, or
 UTXOs that were spent in CJs older than our crawl horizon). They
 are not validation failures.
 
-The three precision checks converge: v6/v7 are precision = 1.0 by
-construction, by the within-CJ structural check on 16,890
-mainnet CJs, and by the probing ground truth on 35 matched real
-maker nicks across 40 distinct UTXOs.
+The three precision checks converge: v6 through v7.3 are
+precision = 1.0 by construction, by the within-CJ structural
+check on 16,890 mainnet CJs, and by the probing ground truth on
+35 matched real maker nicks across 40 distinct UTXOs.
 
 ## 7. Anonymity-set reduction
 
@@ -656,13 +688,13 @@ orderbook once and follows funding-tx CIOH can extract a
 precision-safe maker-wallet edge that the chain-only v6/v7/v7.1/
 v7.2 pipeline does not produce.
 
-![residual anonymity set histogram (v7)](figures/anonset_reduction_hist.svg)
+![residual anonymity set histogram (v7.3)](figures/anonset_reduction_hist.svg)
 
-The v6-vs-v7 overlay makes the shift visible:
+The overlay across all five iterations makes the shift visible:
 
-![v6 vs v7 anonset overlay](figures/v6_vs_v7_anonset_overlay.svg)
+![v6 through v7.3 anonset overlay](figures/v6_vs_v7_anonset_overlay.svg)
 
-The v7 distribution sits to the left of v6 across the whole
+The v7.3 distribution sits to the left of v6 across the whole
 range: more residual = 1 and residual = 2 CJs, fewer in the long
 tail. 32% of CJs have residual <= 2 and 67% have residual <= 4.
 
@@ -673,9 +705,9 @@ The reduction holds across every round size in the corpus:
 ![mean anonset before and after, by n_eq](figures/anonset_per_n_eq.svg)
 
 The grey bars are the published anonymity sets the taker thinks
-they hide in; the red bars are the v7 lower-bound residual after
-certified makers are removed. The residual stays in a 2 to 4
-band across the entire range from `n_eq = 3` to `n_eq = 17`.
+they hide in; the red bars are the v7.3 lower-bound residual
+after certified makers are removed. The residual stays in a 2 to
+4 band across the entire range from `n_eq = 3` to `n_eq = 17`.
 Larger rounds do not buy a larger hide-set in practice; they
 contribute more chain edges to the attacker.
 
@@ -712,7 +744,7 @@ direction: T's equal output to input of slot in S to cluster
 containing S's other CJs.
 
 3,617 of the 16,890 ILP-decoded mainnet CJs (21.4%) show a
-forward-spent equal output whose downstream slot is in a v7
+forward-spent equal output whose downstream slot is in a v7.3
 cluster not already certified for any maker of T. Those are the
 candidate role-change exposures: the slot is most likely the
 taker of T behaving as a maker in S, modulo the ambiguity that it
@@ -767,10 +799,27 @@ every CJ regardless.
   derived address) look like two singletons to the clusterer. The
   probe data (§6.3) suggests this is not the dominant pattern,
   but a direct count is not yet available.
+- Active-adversary edge (probed nick to advertised UTXO).
+  We prototyped a v7.4 layer that unions any v7.3 clusters whose
+  inputs or change outputs match the UTXOs advertised by a single
+  nick during probing (`tmp/probe_rounds/*.json`, 72 nicks across
+  101 advertised UTXOs). Four nicks span multiple v7.3 clusters,
+  yielding four safe unions over nine clusters (delta -5
+  clusters, 68,998 to 68,993) with zero forbid conflicts and zero
+  precision violations. The mean residual anonymity set is
+  unchanged at 3.706 because the touched clusters are all small.
+  We do not include v7.4 in the headline numbers: it requires an
+  active adversary (orderbook probing with auth verification),
+  which breaks the passive-on-chain threat model of v6 through
+  v7.3. The four v7.4 nicks are disjoint from the four v7.3 FB
+  nicks, so the probe-derived edge corroborates v7.3 from an
+  independent angle and is documented here as a negative-yield
+  augmentation for an active threat model.
 
 The probe data after the v7.3 upgrade shows 35 of 72 advertised
-nicks matched (same as v6, v7, v7.1, and v7.2); each layer passes
-the zero-cross-nick-collision check at precision = 1.0. The newer
+nicks matched (same as v7, v7.1, and v7.2; v6 alone matched 16
+nicks because it relies on the change-chain only); each layer
+passes the zero-cross-nick-collision check at precision = 1.0. The newer
 merges concentrate in older corpus regions where more chain and
 non-CJ CIOH edges have time to fire, away from the probed-nick
 set of recent live makers. The four nicks v7.3 merges are
