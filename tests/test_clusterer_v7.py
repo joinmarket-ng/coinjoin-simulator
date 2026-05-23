@@ -300,3 +300,39 @@ def test_strict_mode_keeps_unique_both_same_slot_edges() -> None:
     labels_strict, stats_strict = cluster_v7(slots, {"T": ["T:0"]}, strict=True)
     assert stats_strict.unique_both_same_slot == 1
     assert labels_strict[1] == labels_strict[3]
+
+
+def test_corpus_unique_blocks_match_with_doppelganger_outside_producer_cj() -> None:
+    # T-m1 is the only slot in T with fee=137 and ppm=13700, but
+    # another slot in an unrelated tx U also has fee=137 and
+    # ppm=13700. Per-CJ univocal would happily union T-m1 with
+    # consumer; corpus_unique must refuse.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=137, eq_amt=10_000),  # 13700 ppm
+        _slot("U", "U-m0", fee=137, eq_amt=10_000),  # 13700 ppm, doppelganger
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=137, eq_amt=10_000),
+    ]
+    labels_per_cj, _ = cluster_v7(slots, {"T": ["T:0"]}, strict=True)
+    labels_corpus, _ = cluster_v7(
+        slots, {"T": ["T:0"]}, strict=True, corpus_unique=True,
+    )
+    # Per-CJ strict: T-m1 (1) unioned with Tp-m0 (3).
+    assert labels_per_cj[1] == labels_per_cj[3]
+    # Corpus-unique: no union.
+    assert labels_corpus[1] != labels_corpus[3]
+
+
+def test_corpus_unique_keeps_globally_unique_match() -> None:
+    # T-m1 is corpus-wide unique on both abs and rel; union should
+    # still fire under corpus_unique.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=137, eq_amt=10_000),  # 13700 ppm
+        _slot("U", "U-m0", fee=999, eq_amt=10_000),
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=137, eq_amt=10_000),
+    ]
+    labels, _ = cluster_v7(
+        slots, {"T": ["T:0"]}, strict=True, corpus_unique=True,
+    )
+    assert labels[1] == labels[3]

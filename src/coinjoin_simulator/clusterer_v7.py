@@ -126,6 +126,7 @@ def attribute_equal_outputs(
     equal_outpoints_by_tx: Mapping[str, Iterable[str]],
     *,
     strict: bool = False,
+    corpus_unique: bool = False,
 ) -> tuple[dict[str, int], AttributionStats]:
     """Attribute reused equal outputs to specific producer slots by fee match.
 
@@ -140,13 +141,23 @@ def attribute_equal_outputs(
     strict:
         If True, only emit an attribution edge when *both* the absolute
         and the relative fee fingerprint independently identify the
-        same unique producer slot (corresponding to the
-        ``unique_both_same_slot`` bucket). This rejects single-criterion
+        same unique producer slot inside ``T`` (the
+        ``unique_both_same_slot`` bucket). Rejects single-criterion
         matches whose target slot may have coincidentally collided with
-        the consumer fingerprint under per-announcement jitter (see
-        \u00a76.1 discussion of the scaled simulator). The default
-        ``False`` reproduces the original v7 behaviour
-        (``unique_either``).
+        the consumer fingerprint under per-announcement jitter.
+    corpus_unique:
+        If True, additionally require that the chosen producer slot's
+        fingerprint identifies it uniquely *across the whole corpus*
+        of v7-enriched slots, not merely within ``T``. This guards
+        against the case in which the producer CJ contains only one
+        slot with a given fingerprint by coincidence, while many other
+        unrelated slots in the corpus share the same fingerprint and
+        the true producer could equally have been any of them. The
+        corpus-wide gate is the strongest of the three; it
+        approximates the asymptotic case in which jittered samples
+        from different policies are statistically rare to coincide.
+        Disabled by default to keep the per-CJ semantics from the
+        original v7 paper.
 
     Returns
     -------
@@ -168,6 +179,15 @@ def attribute_equal_outputs(
     for i, s in enumerate(slots):
         for u in s.inputs:
             consumers_of[u].append(i)
+
+    # Corpus-wide fingerprint indices: which slot ids share a given
+    # (abs_fp,) or (rel_fp,) value. Only computed when needed.
+    corpus_abs: dict[int, list[int]] = defaultdict(list)
+    corpus_rel: dict[int | None, list[int]] = defaultdict(list)
+    if corpus_unique:
+        for i, s in enumerate(slots):
+            corpus_abs[s.abs_fp()].append(i)
+            corpus_rel[s.rel_fp_ppm()].append(i)
 
     edges: dict[str, int] = {}
     cross_cj = 0
@@ -238,8 +258,30 @@ def attribute_equal_outputs(
                 else:
                     n_ambig += 1
                 if chosen is not None and not assigned:
-                    edges[outpoint] = chosen
-                    assigned = True
+                    if corpus_unique:
+                        # Require that the chosen producer slot is, by
+                        # its (abs_fp, rel_fp), unique across the
+                        # corpus when we discount (a) the consumer
+                        # itself (which by construction shares the
+                        # producer's fingerprint) and (b) slots in the
+                        # producer CJ ``T`` that the per-CJ gate has
+                        # already excluded as non-matches. In other
+                        # words: there must be no doppelganger of the
+                        # producer in any OTHER tx.
+                        prod = slots[chosen]
+                        prod_abs_hits = [
+                            sid for sid in corpus_abs.get(prod.abs_fp(), [])
+                            if sid != cid and slots[sid].txid != ptxid
+                        ]
+                        prod_rel_hits = [
+                            sid for sid in corpus_rel.get(prod.rel_fp_ppm(), [])
+                            if sid != cid and slots[sid].txid != ptxid
+                        ]
+                        if prod_abs_hits or prod_rel_hits:
+                            chosen = None
+                    if chosen is not None:
+                        edges[outpoint] = chosen
+                        assigned = True
 
     return edges, AttributionStats(
         cross_cj_reuses=cross_cj,
@@ -286,6 +328,7 @@ def cluster_v7(
     equal_outpoints_by_tx: Mapping[str, Iterable[str]] | None = None,
     *,
     strict: bool = False,
+    corpus_unique: bool = False,
 ) -> tuple[dict[int, int], AttributionStats]:
     """Run the v7 clusterer.
 
@@ -307,6 +350,11 @@ def cluster_v7(
     (\u00a76.1) demonstrated under per-announcement fee jitter, at the
     cost of recall (the recovered chain set shrinks roughly to the
     ``unique_both_same_slot`` bucket).
+
+    ``corpus_unique=True`` further restricts attribution to producer
+    slots whose abs and rel fingerprints identify them uniquely across
+    the entire corpus, not just within the producer CJ. See
+    :func:`attribute_equal_outputs` for details.
     """
     idx = _build_index_v7(slots)
     uf = _ConstrainedUnionFind()
@@ -337,6 +385,7 @@ def cluster_v7(
     if equal_outpoints_by_tx:
         edges, stats = attribute_equal_outputs(
             slots, equal_outpoints_by_tx, strict=strict,
+            corpus_unique=corpus_unique,
         )
         for outpoint, producer_slot_id in edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
