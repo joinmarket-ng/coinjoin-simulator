@@ -1,7 +1,5 @@
 # JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
 
-# JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
-
 > **TL;DR.** JoinMarket is a Bitcoin CoinJoin protocol where a
 > *taker* pays a small fee to one or more *makers* to mix coins
 > into a single transaction with several equal-value outputs;
@@ -72,7 +70,7 @@ JoinMarket defends this set in several layered ways:
 - Each maker advertises offers on the JoinMarket directory-server
   overlay. Today the overlay is a small set of directory nodes
   that relay (often end-to-end encrypted) Tor messages between
-  participants; earlier versions used IRC. Nicks are randomised
+  participants; earlier versions used IRC. Nicks are randomized
   per session, and offers can be advertised either with or
   without a fidelity bond. A *fidelity bond* (FB) is a timelocked
   P2WSH UTXO the maker proves they control; bondless offers can
@@ -97,7 +95,8 @@ every clustered maker shrinks the taker's hide-set by one.
 This paper answers:
 
 1. How many JoinMarket maker wallets can be clustered from
-   on-chain data alone, at precision = 1.0, on the full mainnet
+   on-chain data alone, at precision = 1.0 (under the gate and
+   corpus described in §5.2 and §6.1), on the full mainnet
    corpus?
 2. By how much does that clustering reduce the per-CJ taker
    anonymity set?
@@ -175,7 +174,7 @@ Three protocol facts are load-bearing for the clusterer:
    outputs look identical (any permutation of equal-output owners
    is consistent with the ILP-recovered fee constraints).
    Section 5.2 (v7) restores this edge by using the consumer
-   slot's own realised fee as a per-CJ fingerprint: if exactly
+   slot's own realized fee as a per-CJ fingerprint: if exactly
    one slot in the producer CJ would have charged this fee at the
    producer CJ's amount, we have identified that slot.
 
@@ -202,7 +201,8 @@ used (with the explicit exception of §5.5, which uses the
 public orderbook to anchor FB-owner identity to funding-tx
 inputs). The intentional restriction to protocol-forced or
 single-CJ-unambiguous evidence is what gives precision = 1.0 by
-construction.
+construction (under the gate and corpus stated in §5.2 and §6.1;
+loosening either is the failure mode discussed in §6.1).
 
 ### 3.1 Worked example
 
@@ -257,7 +257,7 @@ become natural inputs for whichever participant next advertises
 from mixdepth 2 (the wallet's depth-rotation policy will usually
 prefer the fattest mixdepth, which after this CJ is often
 mixdepth 2 but not necessarily). When such a reuse happens in a
-later CJ $S$, the consumer slot's realised fee in $S$ identifies
+later CJ $S$, the consumer slot's realized fee in $S$ identifies
 the producer slot in $T$ if and only if no other slot in $T$ would
 have charged the same fee at $S$'s amount: that is the
 fee-fingerprint rule of §5.2 in concrete form. For example, if
@@ -288,7 +288,7 @@ An ILP run on one CJ *succeeds* when it returns a feasible
 slot-by-slot decomposition that satisfies every per-slot
 constraint: each slot is a single mixdepth's worth of inputs that
 sums to exactly one equal output plus one change output, every
-slot's realised fee is non-negative, and the per-CJ fee budget is
+slot's realized fee is non-negative, and the per-CJ fee budget is
 respected. We count anything else (solver timeout at 2 s, an LP
 relaxation that proves infeasibility under
 $\mathit{max\_fee\_rel} = 0.05$, or a feasible-but-degenerate
@@ -342,9 +342,11 @@ construction the clusterer can only *under-cluster*: a maker
 whose downstream remix is missing from the corpus (crawl
 frontier, ILP failure, or exit from the ecosystem) appears as a
 singleton even when their wallet served many more CJs in
-reality. Precision is therefore $= 1.0$ by construction, and
-recall is bounded below by the fraction of CJs the corpus
-successfully observes and decodes.
+reality. Precision is therefore $= 1.0$ by construction under
+the gate stated here (see §5.2 for the three gate strengths and
+§6.1 for their measured behavior), and recall is bounded below
+by the fraction of CJs the corpus successfully observes and
+decodes.
 
 ### 5.1 Cluster size distribution
 
@@ -393,7 +395,7 @@ $$
 \end{cases}
 $$
 
-The ILP recovers this realised fee per slot from the input total,
+The ILP recovers this realized fee per slot from the input total,
 equal output, and change output. The fee is observable but not by
 itself identifying: thousands of slots share the same
 $(\mathit{cjfee}_r, \mathit{cjfee}_a)$ fingerprint across the
@@ -403,11 +405,11 @@ distinct same-policy makers.
 v7 uses the fee fingerprint locally, *within a single producer
 CJ*. When an equal output of producer CJ $T$ is spent as a maker
 input of slot $c$ in a later CJ $S$, the consumer slot $c$
-carries its own realised fee $f_c$ at amount $a_S$. We then look
+carries its own realized fee $f_c$ at amount $a_S$. We then look
 at $T$'s maker slots $S_1, \dots, S_n$ (at most about 22 in
 practice) and ask: is there exactly one $S_i$ whose advertised
 offer would produce $f_c$ at amount $a_S$? Concretely, for each
-$S_i$ with realised fee $f_i$ at amount $a_T$ we check the two
+$S_i$ with realized fee $f_i$ at amount $a_T$ we check the two
 admissible interpretations:
 
 - *absolute* match: $f_i = f_c$ (so $S_i$'s policy is
@@ -734,7 +736,7 @@ in two regimes:
 - **varied regime**: makers draw policy parameters
   $(\mathit{cjfee}_r, \mathit{cjfee}_a, \mathit{txfee},
   \mathit{minsize})$ from a discrete diversity grid, with a small
-  per-announcement multiplicative jitter (~10%) on the realised
+  per-announcement multiplicative jitter (~10%) on the realized
   fingerprint. This approximates the empirical fee diversity
   observed in JoinMarket order-book snapshots.
 
@@ -802,7 +804,7 @@ Second, in the **varied regime under the per-CJ loose gate** the
 blinded clusterer produces 136 precision-violating clusters out
 of 4,620 (2.9%). The violations are all driven by the same
 mechanism: per-announcement fee jitter occasionally makes a
-maker's realised fingerprint in producer CJ $T$ coincide
+maker's realized fingerprint in producer CJ $T$ coincide
 *numerically* with a different maker's policy, while the true
 producer of the consumed equal output has drifted off the
 consumer's fingerprint. The per-CJ univocal test selects the
@@ -821,7 +823,7 @@ yet another jitter-aligned maker). The corpus-wide doppelganger
 check intercepts exactly these cases. In the torture regime the
 corpus-unique gate produces no edges at all because in the
 absence of chain-edge backbone every fingerprint has many
-candidate doppelgangers; this is the desired behaviour for an
+candidate doppelgangers; this is the desired behavior for an
 adversarial setting in which fees alone do not carry attribution
 signal.
 
@@ -913,10 +915,13 @@ our corpus (cold-storage parts of the wallet, recent deposits, or
 UTXOs that were spent in CJs older than our crawl horizon). They
 are not validation failures.
 
-The three precision checks converge: v6 through v7.3 are
-precision = 1.0 by construction, by the within-CJ structural
-check on 16,890 mainnet CJs, and by the probing ground truth on
-35 matched real maker nicks across 40 distinct UTXOs.
+The three precision checks converge: under the loose gate of
+§5.2 and the 16,890-CJ corpus, v6 through v7.3 are precision =
+1.0 by construction, by the within-CJ structural check on
+16,890 mainnet CJs, and by the probing ground truth on 35
+matched real maker nicks across 40 distinct UTXOs. The strict
+and corpus-unique gates of §5.2 produce different cluster
+counts (§6.1) but pass the same probe check (§6.2).
 
 ## 7. Anonymity-set reduction
 
@@ -1028,7 +1033,7 @@ A taker who later participates as a maker in a future CJ S leaks
 their cross-round identity: the maker slot in S that consumes one
 of the taker's equal outputs from T becomes part of a multi-slot
 cluster whose other members are the taker's later maker
-behaviour. The attack is the same chain edge read in the other
+behavior. The attack is the same chain edge read in the other
 direction: T's equal output to input of slot in S to cluster
 containing S's other CJs.
 
@@ -1051,7 +1056,7 @@ The attack pipeline of §5 succeeds because three classes of
 on-chain artefact survive every JoinMarket round: (i) the
 same-mixdepth change UTXO that a maker returns to in the next
 round (the change-chain edge of §5 fact 2), (ii) the per-slot
-realised fee that distinguishes one maker's offer from another
+realized fee that distinguishes one maker's offer from another
 within a single producer CJ (the fee-fingerprint of §5.2), and
 (iii) the non-CoinJoin spends in which a maker consolidates or
 externally pays from one or more of its UTXOs, which the CIOH
@@ -1063,8 +1068,15 @@ disrupts the structural artefact, not the local symptom.
 ### 9.1 Within current JoinMarket
 
 What an individual maker or taker can do **without protocol
-changes**, listed roughly from biggest expected impact to
-smallest:
+changes**. Each item below closes one of the §5 channels in
+isolation, but as §9.3 quantifies, none of them on its own
+shifts the user-facing per-CJ residual anonymity set: the v6
+change-chain alone carries enough signal to certify essentially
+every maker. The items are still worth adopting as
+defence-in-depth (each strictly reduces the analyst's edge set
+and lowers the cost of the §9.2 protocol changes), but the
+honest expectation is that meaningful privacy gain requires the
+protocol-level changes of §9.2.
 
 1. **Pool the fee fingerprint.** The dominant source of v7's
    marginal recall over v6 is that two makers in the same
@@ -1092,11 +1104,11 @@ smallest:
    the clusterer falls back to v6, but the user-facing
    per-CJ residual anonset stays at 0.00 (every maker is still
    certified through the change-chain edge alone). Fee
-   homogenisation removes one channel the analyst would
+   homogenization removes one channel the analyst would
    otherwise use but does not, on its own, shift the residual;
    it is most useful as a prerequisite that lowers the cost of
    the §9.2 protocol changes (a homogeneous fee surface makes
-   the per-round commitment of §9.2.1 strictly more powerful,
+   the per-round commitment of §9.2 item 1 strictly more powerful,
    because no residual within-CJ fee signal survives the
    commitment to leak the equal-output owner permutation).
 2. **Disjoint fidelity-bond wallet.** 66 of 95 FBs in our
@@ -1105,14 +1117,13 @@ smallest:
    anchor that ties the FB owner's nick to one or more maker
    slots. A maker who funds the FB exclusively from a wallet
    that never receives JM equal outputs or change closes this
-   one channel. We rank this lower than (1) and (3) on impact:
-   in a fee-heterogeneous orderbook the same nick is likely to
-   be reidentifiable from its unique (fee, bond-value) signature
-   and from §5.4 non-CJ CIOH anyway, so the FB-funding edge is
-   most valuable to defenders when other identifying signals
-   are already homogenised (item 1 below). It is, however, a
-   one-shot low-cost hygiene step that closes one independent
-   edge and is therefore worth following regardless.
+   one channel. As with item 1, the §9.3 simulator confirms
+   that closing this channel alone does not shift the
+   user-facing residual; in a fee-heterogeneous orderbook the
+   same nick is generally reidentifiable from its unique (fee,
+   bond-value) signature and from §5.4 non-CJ CIOH regardless.
+   It is, however, a one-shot low-cost hygiene step that closes
+   one independent edge and is therefore worth following.
 3. **Avoid two-output non-CJ spends that consume maker change.**
    The v7.1 and v7.2 edges only fire on non-CJ spenders of at
    most two outputs, because that is the only non-CJ shape where
@@ -1148,7 +1159,7 @@ sometimes recommended but do not defeat the attack:
   address for the next round's change output does not break
   v7.1, v7.2, or v7.3.
 - *Run the maker over Tor only*. The whole attack runs on
-  the public chain; network-layer anonymisation does not change
+  the public chain; network-layer anonymization does not change
   any of the structural channels.
 
 ### 9.2 Protocol-level changes
@@ -1222,25 +1233,25 @@ Seven variants:
   distinct fee policy from the 12-row $\mathit{cjfee}_r$ grid
   $\times$ 6-row $\mathit{cjfee}_a$ grid $\times$ 4-row
   $\mathit{minsize}$ grid). All §5 channels active.
-* `cm_uniform_fee` (§9.1.1, full): every maker advertises the
+* `cm_uniform_fee` (§9.1 item 1, full): every maker advertises the
   reference client's default policy
   ($\mathit{cjfee}_r = 10^{-4}$, $\mathit{cjfee}_a = 0$,
   $\mathit{minsize} = 27{,}300$ sats). v7's fee-fingerprint
   edge collapses by construction.
-* `cm_three_policy_pool` (§9.1.1, partial): every maker picks
+* `cm_three_policy_pool` (§9.1 item 1, partial): every maker picks
   one of three well-known default policies (low / default /
   high) at startup. Quantifies the marginal value of full vs.
   partial fee pooling.
-* `cm_no_two_output_cioh` (§9.1.3): non-CJ maker spends are
+* `cm_no_two_output_cioh` (§9.1 item 3): non-CJ maker spends are
   always batched to $\geq 3$ outputs, so the §5.4 CIOH edge
   never fires. (Inactive in the simulator, which does not
   emit non-CJ maker spends; listed for completeness.)
-* `cm_no_eq_chain` (§9.2.1): per-round equal-output owner
+* `cm_no_eq_chain` (§9.2 item 1): per-round equal-output owner
   commitment. The clusterer loses both the equal-output
   identity per slot and the per-tx equal-outpoint set, so the
   v7 attribution layer cannot fire. v6's change-chain edge
   is unaffected.
-* `cm_no_same_mixdepth_change` (§9.2.3): the maker's change
+* `cm_no_same_mixdepth_change` (§9.2 item 3): the maker's change
   output is placed at a mixdepth the analyst cannot
   pre-associate with the slot's input mixdepth, so the
   same-mixdepth change UTXO no longer appears in the slot
@@ -1250,8 +1261,12 @@ Seven variants:
   + `cm_no_two_output_cioh`. The post-protocol-change world
   with every §9.2 mitigation adopted at once.
 
-Results (precision is 1.0 in every row; clusterer is the v7
-loose gate of §5.2; mean $n_{eq} = 5.00$ across all variants):
+Results (clusterer is the v7 loose gate of §5.2; mean
+$n_{eq} = 5.00$ across all variants; precision against the
+simulator's ground-truth maker labels is 1.0 for every variant,
+which is a stricter check than the mainnet §6.2 probe corpus
+because every output's true owner is known, not just the 35
+probed nicks):
 
 | variant                       | clusters | recall proxy | mean residual | share residual = 1 |
 |-------------------------------|---------:|-------------:|--------------:|-------------------:|
@@ -1270,7 +1285,7 @@ means every maker is certified and only the taker remains).
 
 Three observations stand out:
 
-1. **In-protocol fee homogenisation alone is not a meaningful
+1. **In-protocol fee homogenization alone is not a meaningful
    defence.** `cm_uniform_fee` and `cm_three_policy_pool` raise
    the cluster count from 387 to 1,064 / 741 (the v7 edge
    collapses, the clusterer is forced to fall back on v6's
@@ -1279,7 +1294,7 @@ Three observations stand out:
    carries the full clustering signal: as long as a maker's
    change UTXO returns as a future input of the same maker (the
    protocol invariant), the analyst can chain its slots without
-   ever looking at fees. Item 9.1.1 was correctly characterised
+   ever looking at fees. Item 9.1.1 was correctly characterized
    in earlier drafts as a partial defence; the simulator shows
    the partial is essentially zero at the user-facing metric.
 
@@ -1312,18 +1327,18 @@ achieves; the *relative ordering* across countermeasures is the
 defendable claim. We also note that the simulator does not
 implement maker drop-out due to private liquidity exhaustion,
 which would further fragment the change-chain on mainnet and
-favour the defender.
+favor the defender.
 
 Answer to the central question. **The protocol is not doomed
 but it is also not patchable within the current spec.**
 In-protocol hygiene (FB-disjoint wallet, fee-policy
-homogenisation, ≥3-output batched off-CJ spends) closes
+homogenization, ≥3-output batched off-CJ spends) closes
 individual side channels but leaves the dominant
 change-chain edge untouched and the mean residual unchanged at
 the user-facing metric. A protocol upgrade that breaks the
-same-mixdepth change invariant (§9.2.3) is the minimum
+same-mixdepth change invariant (§9.2 item 3) is the minimum
 necessary change; pairing it with the per-round
-equal-output owner commitment (§9.2.1) is sufficient to
+equal-output owner commitment (§9.2 item 1) is sufficient to
 restore the published $n_{eq}$ as the operative anonset under
 this passive on-chain threat model.
 
@@ -1389,11 +1404,13 @@ this passive on-chain threat model.
 - Active-adversary edge (probed nick to advertised UTXO).
   We prototyped a v7.4 layer that unions any v7.3 clusters whose
   inputs or change outputs match the UTXOs advertised by a single
-  nick during probing (`tmp/probe_rounds/*.json`, 72 nicks across
-  101 advertised UTXOs). Four nicks span multiple v7.3 clusters,
-  yielding four safe unions over nine clusters (delta -5
-  clusters, 68,998 to 68,993) with zero forbid conflicts and zero
-  precision violations. The mean residual anonymity set is
+  nick during probing (the §6.2 probe corpus, 72 nicks across
+  101 advertised UTXOs; per §2 the published artifact is reduced
+  to per-nick counts, the per-UTXO mapping is kept local). Four
+  nicks span multiple v7.3 clusters, yielding four safe unions
+  over nine clusters (delta -5 clusters, 68,998 to 68,993) with
+  zero forbid conflicts and zero precision violations. The mean
+  residual anonymity set is
   unchanged at 3.706 because the touched clusters are all small.
   We do not include v7.4 in the headline numbers: it requires an
   active adversary (orderbook probing with auth verification),
@@ -1406,7 +1423,8 @@ this passive on-chain threat model.
 The probe data after the v7.3 upgrade shows 35 of 72 advertised
 nicks matched (same as v7, v7.1, and v7.2; v6 alone matched 16
 nicks because it relies on the change-chain only); each layer
-passes the zero-cross-nick-collision check at precision = 1.0. The newer
+passes the zero-cross-nick-collision check under the loose gate
+(precision = 1.0 against the §6.2 probe corpus). The newer
 merges concentrate in older corpus regions where more chain and
 non-CJ CIOH edges have time to fire, away from the probed-nick
 set of recent live makers. The four nicks v7.3 merges are
@@ -1457,16 +1475,16 @@ entire range of round sizes the protocol supports. Section 9
 discusses the available countermeasures and §9.3 quantifies
 their effectiveness on the §6.1 simulator. The within-protocol
 options that an individual maker or taker can adopt today (a
-disjoint fidelity-bond wallet, fee-policy homogenisation,
+disjoint fidelity-bond wallet, fee-policy homogenization,
 taker-side maker selection by expected anonset rather than by
 fee alone) reduce side channels but, in the simulator, leave
 the mean residual at the same 0.00 as the baseline because the
 v6 change-chain edge alone carries the full clustering signal.
 Substantial gains require protocol changes. The simulator
-identifies cross-mixdepth change placement (§9.2.3) as the
+identifies cross-mixdepth change placement (§9.2 item 3) as the
 single highest-impact change (mean residual 0.00 to 3.18 out
 of 5.00); pairing it with the per-round equal-output owner
-commitment (§9.2.1) restores the full published $n_{eq}$ as
+commitment (§9.2 item 1) restores the full published $n_{eq}$ as
 the operative anonset (mean residual 5.00 out of 5.00). The
 protocol is therefore *hardenable* in a concrete and
 quantifiable sense, but not by maker-side or taker-side
