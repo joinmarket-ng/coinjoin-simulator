@@ -1556,6 +1556,71 @@ not over-merge. Future improvements should target ILP recall
 multi-hop backward walks from FB-funding txs through chains of
 non-CJ ancestors.
 
+## Appendix A. Forensic slot sample (v7.3, 1y merged corpus)
+
+To make the v7.3 attribution and clustering paths concretely
+auditable, we draw a stratified sample of 250 maker slots from
+the merged 1y corpus and emit a per-slot provenance record
+(producer txid, slot index, cluster id, cluster size,
+certification path, consumer txid when applicable, producer
+equal-output outpoint, and the partial-ILP flag). The full
+sample lives alongside the corpus as
+``forensics_v73_sample_1y_partial.json`` (250 slots across six
+strata: ``cert_a``, ``cert_b``, ``large_cluster``,
+``fb_anchored``, ``partial_only``, ``uncert_control``); the
+following table shows two representative cases from four of
+those strata. The ``fb_anchored`` stratum is omitted from the
+in-paper table because the v7.3 FB-funding rule produced only 12
+cross-cluster unions in the 1y window and no single cluster
+serves as a clean isolated case; the bulk evidence for v7.3
+remains the aggregate row of the $\S 7.1$ table.
+
+| stratum | producer txid | slot | cluster_id | cluster_size | partial | path | n_inputs | equal (sats) | fee (sats) | consumer txid | producer eq outpoint |
+|---|---|---:|---:|---:|:---:|:---:|---:|---:|---:|---|---|
+| cert_a | `1ba90350d3...` | 1 | 1399 | 51 | no | A | 1 | 8,131,344 | 2,000 | n/a | `1ba90350d342...` |
+| cert_a | `244eede400...` | 5 | 2997 | 17 | no | A | 1 | 5,875,530 | 23,496 | n/a | `244eede40021...` |
+| cert_b | `990b06111a...` | 2 | 2266 | 27 | no | B | 1 | 6,993,065 | 699 | `654db837da...` | `990b06111af3...` |
+| cert_b | `ee28f32bf2...` | 0 | 5864 | 12 | no | B | 1 | 4,997,466 | 50 | `ed62715506...` | `ee28f32bf2f1...` |
+| large_cluster | `b6a5cfb18f...` | 3 | 3907 | 31 | no | - | 1 | 4,725,923 | 95 | n/a | n/a |
+| large_cluster | `ae6e68dd89...` | 2 | 2049 | 127 | no | - | 1 | 1,068,187 | 4,272 | n/a | n/a |
+| partial_only | `898719544c...` | 6 | 10292 | 4 | yes | - | 1 | 1,395,032 | 38 | n/a | n/a |
+| partial_only | `1f65efa18e...` | 2 | 14931 | 3 | yes | - | 1 | 129,426 | 518 | n/a | n/a |
+
+The two ``cert_a`` rows are slots whose published equal output
+later appears as an input to another CJ where the fee
+fingerprint of the producer slot is corpus-univocal (no other
+producer slot in any decoded CJ in the window would have charged
+the same absolute and relative coordinator fee at the consumer
+amount). The ``cert_b`` rows are slots that are *not*
+fingerprint-attributed at the consumer CJ, but whose producer
+cluster appears exactly once in the consumer's equal-input
+candidate set and at least once in its change-input cluster set,
+so the cluster-co-spend rule of $\S 7$ Path B disambiguates them
+deterministically. The ``large_cluster`` rows sit in clusters of
+$\geq 28$ slots (the top 1% of the 23,562-cluster distribution)
+yet remain uncertified: their cluster is large enough to
+participate in CIOH and round-trip edges but no consumer CJ in
+the window happens to anchor a same-cluster change at the same
+time as an equal-input from this producer. The ``partial_only``
+rows are recovered by the greedy preprocessing pass of $\S 7.4$
+and would have been silently dropped in a full-ILP-only
+pipeline; both remain uncertified here because no consumer CJ
+links back to them in the 1y window, but they enlarge the
+denominator of the published $n_{eq}$ figures by contributing
+real maker slots whose existence the analyst can establish
+without the full ILP.
+
+A reader can replay any row by piping the producer txid into
+``joinmarket_analyzer.solver.solve_all_solutions`` (for
+``partial=no`` slots) or ``greedy_preprocessing`` (for
+``partial=yes`` slots) at ``max_fee_rel = 0.05``, intersecting
+the result with the consumer txid's input set, and checking the
+Path A or Path B rule of $\S 7$. The full per-slot trace
+contains 73,981 rows (one per merged maker slot, including
+provenance, cluster id, and the FB-anchored / large-cluster
+flags) and is included in the corpus release for full
+auditability.
+
 ## 11. Conclusion
 
 The JoinMarket equal-output anonymity set as published per round
