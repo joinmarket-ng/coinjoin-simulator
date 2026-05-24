@@ -421,10 +421,15 @@ admissible interpretations:
 - *absolute* match: $f_i = f_c$ (so $S_i$'s policy is
   $\mathit{cjfee}_a = f_c$);
 - *relative* match: $f_i / a_T$ and $f_c / a_S$ agree to the
-  nearest part per million (each side is rounded to its
-  nearest integer ppm via banker's rounding and the two
-  integers must match), so $S_i$'s implied policy is
-  $\mathit{cjfee}_r = f_c / a_S$ to that resolution.
+  nearest part per million. Each side's ppm value is computed
+  in integer arithmetic over the satoshi-denominated fee and
+  equal-amount: $\mathrm{ppm}(f, a) = \mathrm{banker\_round}(f
+  \cdot 10^6 / a)$, evaluated as a single `divmod` on
+  arbitrary-precision integers so that no float64 truncation
+  enters the equality test. Two slots match on the relative
+  fingerprint iff their integer ppm values are equal, which
+  in turn implies $S_i$'s policy is $\mathit{cjfee}_r = f_c /
+  a_S$ to that resolution.
 
 v7 admits three gate strengths, in increasing order of
 precision and decreasing order of recall. All three share the

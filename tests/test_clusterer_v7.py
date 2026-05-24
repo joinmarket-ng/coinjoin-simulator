@@ -64,6 +64,30 @@ def test_rel_fingerprint_none_when_no_equal_amt() -> None:
     assert s.rel_fp_ppm() is None
 
 
+def test_rel_fingerprint_uses_integer_bankers_rounding() -> None:
+    # Banker's rounding: 0.5 rounds to even.
+    # equal_amt 2 sats, fee 1 sat: ppm = 500_000 (exact, no rounding).
+    s = _slot("t", "m0", eq_amt=2, fee=1)
+    assert s.rel_fp_ppm() == 500_000
+    # Halfway case rounds down to even: fee 1, eq 4 -> 250_000 exact
+    s = _slot("t", "m0", eq_amt=4, fee=1)
+    assert s.rel_fp_ppm() == 250_000
+    # fee 3, eq 8 -> 375_000 exact
+    s = _slot("t", "m0", eq_amt=8, fee=3)
+    assert s.rel_fp_ppm() == 375_000
+
+
+def test_rel_fingerprint_stable_at_large_equal_amounts() -> None:
+    # 100 BTC equal output (1e10 sats), 5 ppm fee -> fee_sats = 50_000.
+    # Exact: 50_000 * 1_000_000 / 10_000_000_001 = 4.9999999995, banker's
+    # rounds to 5 (not 4). This catches both float drift and any naive
+    # truncation that would round to 4.
+    eq = 10_000_000_001  # ~100 BTC + 1 sat
+    fee = 50_000
+    s = _slot("t", "m0", eq_amt=eq, fee=fee)
+    assert s.rel_fp_ppm() == 5
+
+
 # ---------------------------------------------------------------------------
 # Attribution
 # ---------------------------------------------------------------------------

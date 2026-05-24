@@ -69,7 +69,7 @@ class MakerSlotV7:
     the maker's fingerprint::
 
         abs_fp = fee_sats
-        rel_fp = round(fee_sats / equal_amt * 1_000_000)  # ppm
+        rel_fp = banker_round(fee_sats * 1_000_000 // equal_amt)  # ppm
 
     A maker advertises a single ``cjfee`` (relative or absolute), so
     one of these two fingerprints is stable across that maker's
@@ -90,7 +90,17 @@ class MakerSlotV7:
     def rel_fp_ppm(self) -> int | None:
         if self.equal_amt_sats <= 0:
             return None
-        return round(self.fee_sats / self.equal_amt_sats * 1_000_000)
+        # Integer banker's rounding of fee_sats * 1_000_000 / equal_amt_sats.
+        # Avoids float drift for large equal-amount values where
+        # fee_sats * 1_000_000 can exceed 2**53 and lose unit precision.
+        num = self.fee_sats * 1_000_000
+        den = self.equal_amt_sats
+        q, r2 = divmod(num, den)
+        # Round-half-to-even (banker's).
+        twice = 2 * r2
+        if twice < den or (twice == den and q % 2 == 0):
+            return q
+        return q + 1
 
     def to_v6(self) -> MakerSlot:
         return MakerSlot(
