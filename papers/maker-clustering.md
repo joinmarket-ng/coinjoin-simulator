@@ -281,7 +281,9 @@ An ILP run on one CJ *succeeds* when it returns a feasible
 slot-by-slot decomposition that satisfies every per-slot
 constraint: each slot is a single mixdepth's worth of inputs that
 sums to exactly one equal output plus one change output, every
-slot's realized fee is non-negative, and the per-CJ fee budget is
+maker slot's realized fee is non-positive (a maker never pays,
+they collect; the taker absorbs the residual and is the only
+slot with a positive realized fee), and the per-CJ fee budget is
 respected. We count anything else (solver timeout at 2 s, an LP
 relaxation that proves infeasibility under
 $\mathit{max\_fee\_rel} = 0.05$, or a feasible-but-degenerate
