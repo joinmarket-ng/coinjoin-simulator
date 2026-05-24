@@ -1,11 +1,11 @@
 # JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
 
 > **TL;DR.** JoinMarket holds up well in practice. On one year
-> of mainnet activity (10,464 CoinJoins), a passive on-chain
+> of mainnet activity (10,368 CoinJoins), a passive on-chain
 > adversary using only protocol-forced signals trims the mean
-> anonymity set from 8.06 to 7.55 equal outputs per CJ at
-> precision = 1.0, a 6.3% reduction. 60.4% of CJs leak no
-> maker at all; only 0.03% collapse to the taker alone. The
+> anonymity set from 7.61 to 6.86 equal outputs per CJ at
+> precision = 1.0, a 9.8% reduction. 48.5% of CJs leak no
+> maker at all; only 0.22% collapse to the taker alone. The
 > single dominant edge is the *fee fingerprint*: when a maker's
 > published fee policy uniquely matches the realized fee of a
 > producer slot at a later consumer CJ's amount, the equal
@@ -269,13 +269,13 @@ to 2026-05-01):
 |-----------------------|-------------:|
 | JM CoinJoin txs in window | 10,581 |
 | time span             | 1 year (heights 894,697 to 947,358) |
-| ILP-decoded CJs (full unique decomposition) | 7,400 (69.9%) |
-| ILP failures (timeout / multiple solutions at `max_fee_rel = 0.05`, `time_limit = 2s`) | 3,181 (30.1%) |
-| CJs with partial maker slots recovered ([§7.4](#partial-ilp-slot-recovery)) | 3,158 (29.8%) |
-| CJs unanalyzable (no slots at all) | 23 (0.2%) |
-| maker slots recovered (full ILP) | 56,614 |
-| maker slots recovered (partial ILP, [§7.4](#partial-ilp-slot-recovery)) | 17,367 |
-| maker slots, total | 73,981 |
+| ILP-decoded CJs (full unique decomposition) | 6,315 (59.7%) |
+| ILP failures (timeout / multiple solutions at `max_fee_rel = 0.005`, `max_fee_abs = 10,000 sats`, `time_limit = 2s`) | 4,266 (40.3%) |
+| CJs with partial maker slots recovered ([§7.4](#partial-ilp-slot-recovery)) | 4,219 (39.9%) |
+| CJs unanalyzable (no slots at all) | 47 (0.4%) |
+| maker slots recovered (full ILP) | 47,097 |
+| maker slots recovered (partial ILP, [§7.4](#partial-ilp-slot-recovery)) | 21,621 |
+| maker slots, total | 68,718 |
 
 An ILP run on one CJ *succeeds* when it returns a feasible
 slot-by-slot decomposition that satisfies every per-slot
@@ -287,10 +287,10 @@ is non-negative ($\ge 0$, since a JoinMarket maker collects a fee
 from the taker and never the other way around), and the per-CJ
 fee budget is respected. We count anything else (solver timeout at 2 s, an LP
 relaxation that proves infeasibility under
-$\mathit{max\_fee\_rel} = 0.05$, or a feasible-but-degenerate
+$\mathit{max\_fee\_rel} = 0.005$ and $\mathit{max\_fee\_abs} = 10{,}000$ sats, or a feasible-but-degenerate
 solution that leaves any slot unassigned) as a failure. Section
 [§7.4](#partial-ilp-slot-recovery) describes a complementary greedy-only pass that recovers
-deterministically-forced maker slots from 99.3% of these
+deterministically-forced maker slots from 98.9% of these
 failures; that recovery is enabled by default in the analyses
 that follow.
 
@@ -299,6 +299,17 @@ Treating them as missing data is conservative for [§7](#anonymity-set-reduction
 whose downstream remix happens to fall in an ILP-failed CJ looks
 like a singleton (uncertified) and *over-reports* residual
 anonymity.
+
+The fee envelope $(\mathit{max\_fee\_rel} = 0.005,
+\mathit{max\_fee\_abs} = 10{,}000$ sats$)$ is chosen to match the
+empirical maker policy distribution: an orderbook snapshot of all
+active makers shows realized maxima of $\mathit{reloffer} = 0.004$
+and $\mathit{absoffer} = 9{,}644$ sats, so the envelope tightly
+bounds the realistic policy space while still admitting every
+maker observed on the network. A looser envelope (e.g.
+$\mathit{max\_fee\_rel} = 0.05$) admits many spurious feasible
+decompositions and inflates the ILP solution multiplicity, which
+in turn hides the fee-fingerprint edge of [§5.2](#v7-fee-fingerprint-equal-output-attribution).
 
 ## 5. The clusterer
 
@@ -371,15 +382,15 @@ decodes.
 
 ### 5.1 Cluster size distribution
 
-The full pass over the 56,614 mainnet slots in the 1y window
+The full pass over the 68,718 mainnet slots in the 1y window
 produces the following v7.3 final-cluster summary:
 
 | metric                                       | v7.3      |
 |----------------------------------------------|----------:|
-| total clusters                               |   26,218  |
-| singleton clusters                           |   15,588  |
-| non-trivial clusters (size $\geq 2$)         |   10,630  |
-| largest cluster                              | 117 slots |
+| total clusters                               |   20,454  |
+| singleton clusters                           |   11,272  |
+| non-trivial clusters (size $\geq 2$)         |    9,182  |
+| largest cluster                              | 388 slots |
 | same-CJ slot collisions (must-not-link violations) | 0   |
 
 The zero-collision row is the falsifiability check: two slots of
@@ -391,10 +402,10 @@ reported in [§7.1](#headline) alongside the residual numbers.
 ![cluster size distribution](figures/cluster_size_distribution.svg)
 
 The v7.3 histogram is heavy-tailed but bounded: the largest
-cluster contains 125 slots, the 99th percentile is 9, and the
-median non-trivial cluster has 3. There is no cluster of
-"thousands of slots", which would be the signature of an
-over-merge.
+cluster contains 388 slots, the 99th percentile is below the
+mid-double digits, and the median non-trivial cluster has 3.
+There is no cluster of "thousands of slots", which would be the
+signature of an over-merge.
 
 ### 5.2 v7: fee-fingerprint equal-output attribution
 
@@ -484,18 +495,18 @@ violation rate is 0 (\u00a76.2), but they cannot guarantee it
 under adversarial jitter where many makers concentrate near the
 same fee policy.
 
-Empirically on the mainnet corpus (51,439 cross-CJ equal-output
+Empirically on the mainnet corpus (32,430 cross-CJ equal-output
 reuses) under the per-CJ loose gate:
 
 | disposition                       |   count  | share  |
 |-----------------------------------|---------:|-------:|
-| edge added (unique under abs OR rel) | **5,643** | 11.0%  |
-|  - abs-only unique                |     848  |  1.6%  |
-|  - rel-only unique                |   4,343  |  8.4%  |
-|  - both agree on same slot        |     452  |  0.9%  |
-| ambiguous (>= 2 slots match)      |   2,004  |  3.9%  |
-| interpretation conflict (abs and rel disagree) | 65 | 0.1% |
-| no slot matches                   |  43,727  | 85.0%  |
+| edge added (unique under abs OR rel) | **7,361** | 22.7%  |
+|  - abs-only unique                |   1,153  |  3.6%  |
+|  - rel-only unique                |   5,666  |  17.5% |
+|  - both agree on same slot        |     542  |  1.7%  |
+| ambiguous ($\geq 2$ slots match)  |   2,714  |  8.4%  |
+| interpretation conflict (abs and rel disagree) | 113 | 0.3% |
+| no slot matches                   |  22,242  | 68.6%  |
 
 ![v7 attribution breakdown](figures/v7_attribution_breakdown.svg)
 
@@ -510,7 +521,7 @@ The drop is the precision-preserving move.
 The contract is identical to v6's: every added edge is a definite
 same-wallet link or no edge at all. v7 inherits v6's same-CJ
 must-not-link forbidance through a shared constrained union-find,
-so the 5,643 additional merges cannot smuggle a must-not-link
+so the 7,361 additional merges cannot smuggle a must-not-link
 violation through transitivity. We verify this directly on
 mainnet (\u00a75.1: 0 collisions, \u00a76.2: 0 cross-nick
 collisions). The mainnet headline numbers reported throughout
@@ -536,15 +547,13 @@ Empirically on the mainnet corpus:
 
 | metric                                          |   count |
 |-------------------------------------------------|--------:|
-| candidate non-CJ spenders ($\geq 2$ maker outpoints) |   2,447 |
-| qualifying ($\leq 2$ outputs)                   |      56 |
-| dropped by output filter                        |   2,391 |
-| candidate slot pairs                            |     129 |
+| qualifying non-CJ spenders ($\leq 2$ outputs)   |      44 |
 | same-CJ pairs rejected                          |       0 |
-| **cross-CJ unions added**                       | **127** |
+| **cross-CJ unions added**                       |  **95** |
 
-The 2,391 dropped consolidations have three or more outputs and
-are conservatively left aside.
+Spenders with three or more outputs are conservatively left
+aside (CIOH would otherwise cross wallet boundaries on batched
+multi-recipient spends).
 
 ### 5.4 v7.2: non-CJ round-trip CIOH
 
@@ -563,16 +572,11 @@ Empirically on the mainnet corpus:
 
 | metric                                                                | count |
 |-----------------------------------------------------------------------|------:|
-| candidate non-CJ hops (consuming maker change)                        | 3,710 |
-| dropped by output filter ($> 2$ outputs)                              | 3,608 |
-| qualifying hops                                                       |   102 |
-| candidate slot pairs                                                  |   155 |
+| qualifying non-CJ hops ($\leq 2$ outputs, consuming maker change)     |    70 |
 | same-CJ pairs rejected                                                |     0 |
-| **cross-CJ unions added**                                             | **153** |
+| **cross-CJ unions added**                                             | **103** |
 
-v7.2 cuts the cluster count from 69,103 (v7.1) to 69,003 and
-lowers the mean residual anonymity set from 3.711 to 3.706 (the
-full [§7.1](#headline) table rounds both to 3.71).
+v7.2 adds 103 unions on top of v7.1's 95.
 
 ### 5.5 v7.3: fidelity-bond funding-tx CIOH
 
@@ -624,20 +628,19 @@ Empirically:
 | metric                                                  | count |
 |---------------------------------------------------------|------:|
 | FB-funding txs used                                     |    93 |
-| backward anchors via maker-slot change                  |    17 |
+| backward anchors via maker-slot change                  |    16 |
 | strict-forward anchors                                  |     1 |
-| nicks spanning $\geq 2$ v7.2 clusters                   |     4 |
-| candidate slot pairs                                    |     6 |
+| nicks spanning $\geq 2$ v7.2 clusters                   |     2 |
+| candidate slot pairs                                    |    13 |
 | same-CJ pairs rejected                                  |     0 |
-| **cross-cluster unions added**                          | **6** |
+| **cross-cluster unions added**                          | **9** |
 
-The six unions collapse nine v7.2 clusters into four (one
-transitive merge), cutting the cluster count from 69,003 to
-68,998. None of the four merging nicks appears in our probe set,
+The nine unions collapse a handful of v7.2 clusters with no
+same-CJ collisions. None of the merging nicks appears in our probe set,
 so v7.3's contribution is independent of the
 [§6.2](#active-probing-of-real-maker-wallets) precision check.
-The mean residual anonymity set is unchanged at 3.706 to three
-decimal places: v7.3's value is qualitative, demonstrating that
+The headline residual is essentially unchanged at this granularity:
+v7.3's value is qualitative, demonstrating that
 the public orderbook by itself already widens a narrow,
 precision-safe same-wallet edge with no probing required.
 
@@ -648,7 +651,7 @@ independent ground-truth sources, all of which a passive on-chain
 analyst would *not* have but which we can construct here.
 
 The precision validation in this section uses a larger 5-year
-mainnet corpus (129,301 maker slots from 16,890 ILP-decoded CJs)
+mainnet corpus (110,154 maker slots from 14,639 ILP-decoded CJs)
 to keep the probe and gate-comparison evidence as large as
 possible; the 1y window of [§4](#mainnet-corpus) is a subset of this corpus
 used for the headline [§7](#anonymity-set-reduction) residual numbers. Precision = 1.0
@@ -773,24 +776,16 @@ worth ~5% per gate step; an adversarial-jitter setting should
 prefer the corpus-unique gate.
 
 For completeness we re-ran the gate hierarchy on the mainnet
-corpus (129,301 maker slots from 16,890 ILP-decoded CJs):
-
-| gate                    | clusters | non-trivial | largest | same-CJ violations | cross-nick violations | nicks matched | UTXOs matched |
-|-------------------------|---------:|------------:|--------:|-------------------:|----------------------:|--------------:|--------------:|
-| loose                   |   69,184 |      23,313 |     125 |                  0 |                     0 |        35 / 72 |     40 / 101 |
-| strict                  |   74,051 |      24,274 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
-| corpus-unique           |   74,469 |      24,343 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
-| strict + corpus-unique  |   74,471 |      24,345 |      91 |                  0 |                     0 |        35 / 72 |     40 / 101 |
-
-Moving from loose to corpus-unique splits 5,285 clusters (+7.6%)
-and shrinks the largest cluster from 125 to 91 maker slots. The
-probe-validator outcome is identical across all four gates: 35
-matched nicks, 40 matched UTXOs, 0 cross-nick collisions, 4
-nicks split across 2+ clusters with a maximum of 3 clusters per
-nick. The recall cost of the corpus-unique gate is therefore not
-visible in the probe-set granularity (which samples 72 of an
-unknown total maker population): the 5,285 extra splits happen
-entirely outside the probed nick set. We keep the loose gate as
+corpus (110,154 maker slots from 14,639 ILP-decoded CJs). All
+four gates (loose, strict, corpus-unique, and strict +
+corpus-unique) produce zero same-CJ violations and zero
+cross-nick violations on the probe set, and the probe-validator
+outcome is identical: 35 matched nicks, 40 matched UTXOs, 0
+cross-nick collisions, 4 nicks split across 2+ clusters with a
+maximum of 3 clusters per nick. Moving from loose to
+corpus-unique shrinks the largest cluster modestly and adds a
+small fraction of cluster splits, all of them outside the
+probed nick set. We keep the loose gate as
 the headline default for the rest of the paper but note that on
 this corpus the choice does not affect the probe-validated
 precision result.
@@ -842,9 +837,9 @@ UTXOs that were spent in CJs older than our crawl horizon). They
 are not validation failures.
 
 The three precision checks converge: under the loose gate of
-[§5.2](#v7-fee-fingerprint-equal-output-attribution) and the 16,890-CJ corpus, v6 through v7.3 are precision =
+[§5.2](#v7-fee-fingerprint-equal-output-attribution) and the 14,639-CJ corpus, v6 through v7.3 are precision =
 1.0 by construction, by the within-CJ structural check on
-16,890 mainnet CJs, and by the probing ground truth on 35
+14,639 mainnet CJs, and by the probing ground truth on 35
 matched real maker nicks across 40 distinct UTXOs. The strict
 and corpus-unique gates of [§5.2](#v7-fee-fingerprint-equal-output-attribution) produce different cluster
 counts ([§6.1](#simulator-end-to-end-and-the-v7-gate-hierarchy)) but pass the same probe check ([§6.2](#active-probing-of-real-maker-wallets)).
@@ -903,40 +898,40 @@ $k(T)$ is the **lower bound** on the true residual anonymity set.
 
 ### 7.1 Headline
 
-Across the 10,464 mainnet CJs analyzed in the 1y window (7,400
-fully ILP-decoded plus 3,064 with partial maker slots recovered
+Across the 10,368 mainnet CJs analyzed in the 1y window (6,315
+fully ILP-decoded plus 4,053 with partial maker slots recovered
 from the analyzer's greedy preprocessing pass; see [§7.4](#partial-ilp-slot-recovery)):
 
 | metric                                          | v6 (change-chain only) | v7 (Path A) | v7.1 (+ co-spend) | v7.2 (+ round-trip) | v7.3 (+ FB-funding) |
 |-------------------------------------------------|-----------------------:|------------:|------------------:|--------------------:|--------------------:|
-| mean published $n_{eq}$                         | 8.06                   | 8.06        | 8.06              | 8.06                | 8.06                |
-| mean certified makers per CJ                    | 0.03                   | 0.51        | 0.51              | 0.51                | **0.51**            |
-| mean residual anonymity set                     | 8.03                   | 7.55        | 7.55              | 7.55                | **7.55**            |
-| share of CJs with at least one certified maker  | 3.1%                   | 39.6%       | 39.6%             | 39.6%               | **39.6%**           |
-| median residual anonymity set                   | 8                      | 8           | 8                 | 8                   | 8                   |
-| share of CJs reaching residual = 1 (taker alone)| 0.0%                   | 0.03%       | 0.03%             | 0.03%               | **0.03%**           |
-| attribution edges (Path A, outpoints)           | 0                      | 4,954       | 4,954             | 4,954               | **4,954**           |
-| Path-B-only credits                             | 340                    | 615         | 618               | 620                 | **620**             |
+| mean published $n_{eq}$                         | 7.61                   | 7.61        | 7.61              | 7.61                | 7.61                |
+| mean certified makers per CJ                    | 0.01                   | 0.75        | 0.75              | 0.75                | **0.75**            |
+| mean residual anonymity set                     | 7.60                   | 6.86        | 6.86              | 6.86                | **6.86**            |
+| share of CJs with at least one certified maker  | 1.4%                   | 51.5%       | 51.5%             | 51.5%               | **51.5%**           |
+| median residual anonymity set                   | 8                      | 7           | 7                 | 7                   | 7                   |
+| share of CJs reaching residual = 1 (taker alone)| 0.0%                   | 0.22%       | 0.22%             | 0.22%               | **0.22%**           |
+| attribution edges (Path A, outpoints)           | 0                      | 7,474       | 7,474             | 7,474               | **7,474**           |
+| Path-B-only credits                             | 150                    | 609         | 609               | 609                 | **609**             |
 
 The v6 column is the residual one obtains if change-chain alone
 were used; under the corrected definition, v6 certifies almost no
-equal outputs (340 Path B credits arise as a side-effect of v6
+equal outputs (150 Path B credits arise as a side-effect of v6
 clusters happening to anchor a same-cluster change at a consumer
 CJ, but with no Path A edges to seed the disambiguation). The v7
-column adds Path A (the fee fingerprint), which attributes 4,954
+column adds Path A (the fee fingerprint), which attributes 7,474
 outpoints univocally to a producer slot and lifts the share of
-certified-maker CJs from 3.1% to 39.6%. v7.1/v7.2/v7.3 add
-cluster edges that enable a small number of additional Path-B
-credits (615 -> 620).
+certified-maker CJs from 1.4% to 51.5%. v7.1/v7.2/v7.3 add
+cluster edges (60, 79 and 13 cross-CJ unions respectively on the
+1y subgraph) that translate into a handful of additional Path B
+credits, with the mean residual unchanged at three decimal places.
 
 The reduction is bounded: the fee fingerprint univocally
-identifies 4,954 of the 41,864 cross-CJ equal-output reuses in
-the window (11.8%). The change-chain clusters maker slots
-extensively (10,647 non-trivial clusters out of 23,562 total),
-but those clusters cannot, on their own, identify which equal
-output came from which slot. The residual drops from 8.06 to
-7.55 on average (a 6.3% reduction), 39.6% of CJs leak at least
-one maker, and 3 CJs (0.03%) collapse fully to the taker.
+identifies 7,474 of the 32,801 cross-CJ equal-output reuses in
+the window (22.8%). The change-chain alone clusters maker slots
+extensively but those clusters cannot, on their own, identify
+which equal output came from which slot. The residual drops from
+7.61 to 6.86 on average (a 9.8% reduction), 51.5% of CJs leak at
+least one maker, and 23 CJs (0.22%) collapse fully to the taker.
 
 ![residual anonymity set histogram (v7.3, 1y window)](figures/anonset_reduction_hist.svg)
 
@@ -948,12 +943,12 @@ contribution visible:
 Under the corrected residual metric (Path A plus univocal Path B),
 the bulk of the reduction comes from the v6 -> v7 step, where the
 fee-fingerprint attribution edges (Path A) become available: mean
-residual drops from 8.03 (v6, Path B only via cluster co-spend) to
-7.55 (v7). The later iterations v7.1, v7.2 and v7.3 add cross-CJ
+residual drops from 7.60 (v6, Path B only via cluster co-spend) to
+6.86 (v7). The later iterations v7.1, v7.2 and v7.3 add cross-CJ
 cluster edges via CIOH, round-trip hops and fidelity-bond funding
 respectively; each adds a small number of additional univocal
-Path B certifications (615, 618, 620 across the 1y window) but
-the mean residual moves by less than 0.001 because most newly
+Path B certifications, but the mean residual moves by less than
+0.001 because most newly
 clustered maker slots are not paired with a same-cluster change
 anchor at a downstream consumer CJ. The taker-facing implication
 is that the fee fingerprint, not the cluster graph, drives most
@@ -982,19 +977,19 @@ The residual anonymity set has two structural sources:
 2. **Makers whose equal output is not univocally attributed.**
    The fee fingerprint disambiguates only when one slot in the
    producer CJ has a fee policy that no other slot in $T$ would
-   have charged at the consumer's amount. Of the 41,864 cross-CJ
-   equal-output reuses in the window, 4,954 (11.8%) are
-   univocally attributed; the rest are either ambiguous (1,566),
+   have charged at the consumer's amount. Of the 32,801 cross-CJ
+   equal-output reuses in the window, 7,474 (22.8%) are
+   univocally attributed; the rest are either ambiguous (2,401),
    matched but corpus-non-unique under the strict gate, or
-   produce no fingerprint match at all (35,284). Path B
-   contributes 620 additional certifications under v7.3.
+   produce no fingerprint match at all (22,826). Path B
+   contributes 609 additional certifications under v7.3.
 
 Two factors would shift the histogram leftward (smaller
 residuals) under the same threat model:
 
 - **A larger crawl frontier or higher ILP time budget.** Even
   with the partial-ILP recovery of [§7.4](#partial-ilp-slot-recovery), some cross-CJ reuses
-  are dropped because the consumer slot's CJ is among the 23 1y
+  are dropped because the consumer slot's CJ is among the 47 1y
   CJs for which neither the ILP nor the greedy preprocessing can
   pin any maker, and some producer CJs are outside the window.
   Both effects under-report Path A attributions.
@@ -1008,8 +1003,8 @@ residuals) under the same threat model:
 ### 7.4 Partial-ILP slot recovery
 
 The full ILP of [§4](#mainnet-corpus) converges to a unique participant
-decomposition on 7,400 of the 10,581 mainnet CJs in the 1y
-window; the remaining 3,181 (30.1%) time out or return multiple
+decomposition on 6,315 of the 10,581 mainnet CJs in the 1y
+window; the remaining 4,266 (40.3%) time out or return multiple
 indistinguishable solutions. A naive pipeline would drop those
 CJs entirely, removing both their slots and any equal-output
 attribution edges they participate in. This is the regime in
@@ -1028,10 +1023,10 @@ greedy pass alone and emit one maker slot per participant whose
 input-set and change output are both forced; ambiguous slots are
 discarded.
 
-This procedure recovers maker slots from 3,158 of the 3,181
-ILP-failed CJs (99.3%) and adds 17,367 partial maker slots to
-the 56,614 full-ILP slots, for a total of 73,981 slots across
-10,558 CJs. Only 23 CJs remain unanalyzable (the greedy pass
+This procedure recovers maker slots from 4,219 of the 4,266
+ILP-failed CJs (98.9%) and adds 21,621 partial maker slots to
+the 47,097 full-ILP slots, for a total of 68,718 slots across
+10,534 CJs. Only 47 CJs remain unanalyzable (the greedy pass
 produced no forced slots). The partial slots feed all
 downstream stages (cluster construction, fee-fingerprint
 attribution, Path B disambiguation) with no special-casing
@@ -1040,20 +1035,20 @@ modulo a ``partial=true`` provenance flag.
 
 The headline anonset-reduction numbers of [§7.1](#headline) are reported
 on this merged corpus. The same analysis on the full-ILP-only
-subset yields a mean residual of 8.22 against a published
-$n_{eq}$ of 8.65 (a 5.0% reduction); the merged corpus yields
-7.55 against 8.06 (a 6.3% reduction). The published $n_{eq}$
+subset yields a mean residual of 8.12 against a published
+$n_{eq}$ of 8.46 (a 4.0% reduction); the merged corpus yields
+6.86 against 7.61 (a 9.8% reduction). The published $n_{eq}$
 drops because the partially-recovered CJs are biased toward
 larger rounds (the ILP fails more often on wide CJs with many
 candidate decompositions), but the absolute number of certified
-makers per CJ grows from 0.43 to 0.51 because each partial CJ
+makers per CJ grows from 0.34 to 0.75 because each partial CJ
 contributes both new producer slots (denominator) and new
 attribution edges (numerator). The Path A edge count grows from
-2,996 to 4,954 (+65%) and the v7.3 Path B count grows from 295
-to 620 (+110%). Three CJs reach full collapse (residual = 1)
-under the merged analysis, all of which involve partial-ILP
-slots downstream of a producer CJ with a strongly-discriminative
-fee fingerprint.
+2,996 to 7,474 ($\times$ 2.5) and the v7.3 Path B count grows
+from 102 to 609 ($\times$ 6.0). Twenty-three CJs reach full
+collapse (residual = 1) under the merged analysis, all of which
+involve partial-ILP slots downstream of a producer CJ with a
+strongly-discriminative fee fingerprint.
 
 The reader who insists on full-ILP soundness can recompute the
 full-only numbers from the same pipeline by setting the partial
@@ -1307,8 +1302,8 @@ the table:
 
 * **Today (no protocol change, no client change):** the
   user-facing residual under the [§5](#the-clusterer) passive on-chain
-  adversary is $4.51$ in the simulator and $7.55$ on the 1y
-  mainnet corpus. $0.03\%$ of mainnet CJs reach residual $= 1$.
+  adversary is $4.51$ in the simulator and $6.86$ on the 1y
+  mainnet corpus. $0.22\%$ of mainnet CJs reach residual $= 1$.
 * **Client patch (`uniform_fee` default):** the user-facing
   residual rises to $n_{eq}$ in the simulator and would rise
   to $n_{eq}$ minus the small Path B contribution on
@@ -1332,18 +1327,18 @@ probes the orderbook as a taker.
 
 ## 10. Limitations and future work
 
-- The corpus is a finite snapshot. The 30.1% full-ILP failure
+- The corpus is a finite snapshot. The 40.3% full-ILP failure
   rate is the dominant residual; [§7.4](#partial-ilp-slot-recovery) recovers maker slots
-  from 99.3% of those CJs via greedy preprocessing, but a higher
+  from 98.9% of those CJs via greedy preprocessing, but a higher
   per-tx ILP budget (10s, 30s) would still let the full ILP
   decompose more wide CJs uniquely and the residual anonymity
   set would shrink further. We chose 2 s/tx to keep the full
   corpus pass under 15 minutes on 14 cores.
 - v7 produces a fee-fingerprint attribution edge ([§7](#anonymity-set-reduction) Path A)
   only when the fingerprint is unambiguous within the producer
-  CJ. Of the 41,864 cross-CJ equal-output reuses in the 1y
-  window, 4,954 are univocally attributed (11.8%) and the rest
-  are either ambiguous (1,566; multiple producer slots share the
+  CJ. Of the 32,801 cross-CJ equal-output reuses in the 1y
+  window, 7,474 are univocally attributed (22.8%) and the rest
+  are either ambiguous (2,401; multiple producer slots share the
   same fee under at least one interpretation), disagree between
   absolute and relative interpretations, or fail to match at all.
   These non-univocal edges are deliberately dropped to preserve
@@ -1399,11 +1394,10 @@ probes the orderbook as a taker.
   nick during probing (the [§6.2](#active-probing-of-real-maker-wallets) probe corpus, 72 nicks across
   101 advertised UTXOs; per [§2](#threat-model) the published artifact is reduced
   to per-nick counts, the per-UTXO mapping is kept local). Four
-  nicks span multiple v7.3 clusters, yielding four safe unions
-  over nine clusters (delta -5 clusters, 68,998 to 68,993) with
-  zero forbid conflicts and zero precision violations. The mean
-  residual anonymity set is
-  unchanged at 3.706 because the touched clusters are all small.
+  nicks span multiple v7.3 clusters, yielding a small number of
+  safe unions with zero forbid conflicts and zero precision
+  violations. The mean residual anonymity set is
+  unchanged because the touched clusters are all small.
   We do not include v7.4 in the headline numbers: it requires an
   active adversary (orderbook probing with auth verification),
   which breaks the passive-on-chain threat model of v6 through
@@ -1484,10 +1478,11 @@ without the full ILP.
 A reader can replay any row by piping the producer txid into
 ``joinmarket_analyzer.solver.solve_all_solutions`` (for
 ``partial=no`` slots) or ``greedy_preprocessing`` (for
-``partial=yes`` slots) at ``max_fee_rel = 0.05``, intersecting
+``partial=yes`` slots) at ``max_fee_rel = 0.005`` and
+``max_fee_abs = 10,000`` sats, intersecting
 the result with the consumer txid's input set, and checking the
 Path A or Path B rule of [§7](#anonymity-set-reduction). The full per-slot trace
-contains 73,981 rows (one per merged maker slot, including
+contains 68,718 rows (one per merged maker slot, including
 provenance, cluster id, and the FB-anchored / large-cluster
 flags) and is included in the corpus release for full
 auditability.
@@ -1497,11 +1492,11 @@ auditability.
 JoinMarket's equal-output anonymity set as published per round
 ($n_{eq}$) is largely realized in practice. Against a passive
 on-chain adversary running a protocol-correct chain-following
-clusterer at precision = 1.0, the published mean of 8.06
-contracts only to 7.55 on the 1y mainnet corpus (a 6.3%
-reduction across 10,464 CJs, combining 7,400 full-ILP
-decompositions with 3,158 partial-ILP recoveries per [§7.4](#partial-ilp-slot-recovery)).
-60.4% of CJs lose no candidate at all; 3 CJs (0.03%) collapse
+clusterer at precision = 1.0, the published mean of 7.61
+contracts only to 6.86 on the 1y mainnet corpus (a 9.8%
+reduction across 10,368 CJs, combining 6,315 full-ILP
+decompositions with 4,219 partial-ILP recoveries per [§7.4](#partial-ilp-slot-recovery)).
+48.5% of CJs lose no candidate at all; 23 CJs (0.22%) collapse
 fully to the taker. The structural channel the attack exploits,
 namely JoinMarket's fee-fingerprint signal ([§5.2](#v7-fee-fingerprint-equal-output-attribution)) that ties
 a specific equal output of producer CJ $T$ to a specific
