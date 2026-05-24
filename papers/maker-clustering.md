@@ -1062,414 +1062,328 @@ every CJ regardless.
 
 ## 9. Countermeasures
 
-The attack pipeline of §5 succeeds because three classes of
-on-chain artefact survive every JoinMarket round: (i) the
-change UTXO that a maker spends as an input to a later CJ
-slot (the change-chain edge of §5 fact 2), (ii) the equal
-output that a maker, in subsequent rounds, spends back as a
-CJ input of its own (the equal-chain edge that the fee
-fingerprint of §5.2 disambiguates), and (iii) the non-CoinJoin
-spends in which a maker consolidates or externally pays from
-one or more of its UTXOs, which the CIOH filter walks under
-the conservative ≤2-output safety rule (§5.3, §5.4). The
-fidelity-bond funding edge of §5.5 is a fourth, weaker
-channel. A countermeasure is meaningful only if it disrupts a
-structural artefact rather than only its local symptom.
+The attack pipeline of §5 succeeds because every CJ a maker
+participates in publishes UTXOs that the maker (or another
+maker pulling from the same mixdepth on its behalf) feeds back
+as inputs to subsequent CJs. There are exactly two such
+channels in JoinMarket as deployed today: (i) the change UTXO
+of CJ $t$ reappears as an input of CJ $t' > t$ ("change
+chain", v6 edge); (ii) the equal output of CJ $t$ reappears as
+an input of CJ $t' > t$, with the fee fingerprint of §5.2
+disambiguating which producer slot of CJ $t$ owned it
+("equal chain", v7 edge). The non-CoinJoin CIOH spends of
+§5.3-§5.4 and the FB-funding edges of §5.5 are auxiliary
+recall multipliers; they cannot, on their own, link two CJs
+together. Closing both reuse channels closes the attack.
 
-The two chain edges (i) and (ii) are not unique to any
-particular implementation detail: the joinmarket-ng maker
-selects inputs from its richest mixdepth
-(`maker/src/maker/coinjoin.py`,
-[`_select_our_utxos`](https://github.com/joinmarket-ng/joinmarket/blob/master/maker/src/maker/coinjoin.py)),
-emits its change back to that same mixdepth, and emits the
-equal output one mixdepth forward. The analyst cannot
-distinguish those three placements from any other; what they
-can do is observe that the same UTXO that left the maker as
-change in CJ $t$ appears as an input in some CJ $t' > t$, and
-chain those two slots together. The two countermeasures that
-move the user-facing residual are therefore the ones that
-prevent the maker's outputs from re-entering the protocol as
-identifiable inputs, *not* the ones that relocate them across
-mixdepths (the analyst's chain walker does not key on
-mixdepth; the simulator's `clusterer_v7.py` builds chain edges
-directly from `change_output` and `equal_output` regardless
-of which mixdepth the producer or consumer slot drew from).
+The two channels do not have symmetric costs to close. The
+change-chain is the easier of the two to break behaviorally:
+a maker that simply refuses to spend its own CJ-emitted change
+as a CJ input removes the edge by construction. The
+equal-chain is harder: a maker's equal output naturally sits
+one mixdepth forward and is the maker's most natural source of
+liquidity for the next CJ slot, so refusing to spend it
+either starves the maker's order book or requires a protocol-
+level guarantee that the output's owner is not derivable
+from the published tx. The first option is empirically not
+sustainable (we quantify the throughput collapse in §9.4); the
+second is precisely what a future per-round equal-output owner
+commitment (e.g. the JMP-0005 ZKP proposal) would buy.
 
 ### 9.1 What an analyst actually sees
 
-Before listing countermeasures we record the signals an
-on-chain adversary can extract today, ordered by recall
-contribution against the §6.1 scaled simulator (which matches
-the JM-NG maker selection model: richest mixdepth, change to
-same mixdepth, equal output to next mixdepth):
+The on-chain artefacts that the §5 pipeline exploits, ordered
+by their contribution to the user-facing residual anonymity
+set (smaller is better for the attacker):
 
-1. **Change-as-input chain edge.** A maker's change UTXO is
-   spent as an input to a subsequent CJ slot of the same
-   maker with high probability over a long horizon (the
-   maker's `select_input_mixdepth` will, sooner or later,
-   pick the mixdepth that holds the change). This edge fires
-   in roughly 95% of the simulator's slot transitions and is
-   the dominant signal: in isolation it certifies essentially
-   every maker. It is mixdepth-agnostic from the analyst's
-   point of view; relocating change to a different mixdepth
-   only delays the certification (the change still appears as
-   an input the next time the maker draws from that
-   mixdepth), it does not break the edge.
-2. **Equal-output-as-input chain edge.** A maker's equal
-   output is spent as an input to a subsequent CJ slot of the
-   same maker, again with high probability over a long
-   horizon. Within a single producer CJ this edge is
-   ambiguous between the two-or-more producer slots that
-   emitted equal outputs of the same denomination; the fee
-   fingerprint of §5.2 disambiguates a sufficient fraction
-   for v7 to lift recall above the v6 floor.
-3. **Within-CJ fee fingerprint.** The marginal recall gain of
-   v7 over v6 comes from per-slot realized fees that
-   distinguish one producer slot from another. Two makers
-   running the same fee policy collide and their equal-chain
-   reuse becomes ambiguous; a maker running a unique policy
-   leaks the equal-output owner permutation through ILP
-   recovery (§5.2).
-4. **Non-CJ CIOH.** ≤2-output non-CJ transactions that spend
-   a maker's UTXOs reveal same-owner sets to the conservative
-   CIOH filter (§5.3, §5.4). Avoidable by routing non-CJ
-   spends through batched (≥3-output) transactions.
-5. **Fidelity-bond funding tx.** Backward CIOH from FB-funding
-   transactions when those are funded from JM-provenance
-   inputs (§5.5). Avoidable by funding the FB from a
-   JM-disjoint wallet.
+1. **Change reuse (v6 chain edge).** A maker's change UTXO is
+   spent as an input of a later CJ slot owned by the same
+   maker. This is structurally unavoidable in JoinMarket as
+   deployed: the maker's input selection follows the richest
+   mixdepth and the change is emitted back into that same
+   mixdepth, so on a long enough horizon the change becomes
+   an input again. At the moment the change is emitted from
+   CJ $t$ the within-CJ ILP of §5 has already linked it to
+   the producer slot's input and equal output; the new
+   information when the change reappears at CJ $t'$ is that
+   the two ILP-linked groups belong to a *single wallet*.
+   Iterating this merge across the maker's full slot history
+   is what reduces the residual to 0 in the simulator: the
+   change-chain edge is the load-bearing cluster-merging
+   signal, even when the equal-chain is suppressed (the
+   `no_eq_chain` row of §9.4 has mean residual 0.83 with
+   22% of CJs at residual = 1, i.e. one maker per CJ is
+   still certified by change reuse alone).
+2. **Equal-output reuse (v7 chain edge).** A maker's equal
+   output is spent as an input of a later CJ slot owned by
+   the same maker. Within the producer CJ $t$, the
+   equal-output owner permutation is ambiguous between the
+   ${\geq}2$ producer slots that emitted equal outputs of the
+   same denomination, but the fee fingerprint of §5.2
+   disambiguates a sufficient fraction for v7 to lift recall
+   above the v6 floor. Without the change-chain, the
+   equal-chain alone is empirically able to certify makers in
+   the simulator because the same fingerprint plus the
+   richest-mixdepth invariant chain enough consecutive slots
+   together.
+3. **Within-CJ fee fingerprint.** The signal that converts
+   the equal-chain from "ambiguous between two or more
+   producer slots" to "edge between two specific slots". A
+   maker on a unique fee policy (the common case under
+   today's varied orderbook, §4) leaks the equal-output owner
+   permutation through ILP recovery; a maker running the
+   reference client's default policy collides with the other
+   default-policy makers and is locally ambiguous.
+4. **Non-CJ CIOH and FB-funding edges.** ≤2-output non-CJ
+   transactions that spend a maker's UTXOs (§5.3-§5.4), and
+   the FB-funding back-walk of §5.5. These cannot link two
+   CJs to each other; they only widen the wallet boundary
+   around an *already-clustered* set of slots. On the
+   mainnet corpus they contribute ~0.01 of the v7-to-v7.3
+   residual reduction.
 
-Each signal closes one *channel*; only signals (1) and (2)
-sit on a path that touches every CJ a maker participates in,
-and the user-facing per-CJ residual anonymity set (§7) is
-sensitive only to those two. The rest are recall multipliers
-that help the analyst but do not unlock new CJs.
+The user-facing per-CJ residual anonymity set (§7) is
+sensitive to signals (1) and (2). Closing only one of them
+leaves the other to carry the certification. Signal (3) is
+necessary for (2) to fire but does not move the residual on
+its own. Signals (4) are recall multipliers, not new edges.
 
-### 9.2 Deployable mitigations
+### 9.2 What does not work, and why
 
-We group countermeasures by deployment cost, not by which
-signal they touch, because the user-facing question is
-what the JoinMarket community can ship.
+Several measures are sometimes suggested as countermeasures
+but do not, on their own, reduce the user-facing residual
+under our threat model:
 
-**Tier A (configuration only, deployable today).**
-
-1. **Fee-policy homogenization.** Today's JoinMarket-NG ships
-   a default $\mathit{cjfee}_r = 10^{-4}$ with $\mathit{cjfee}_a$
-   set to recover the maker's expected on-chain cost at typical
-   round sizes (`maker/src/maker/config.py:343-350`). A maker
-   who ships the default policy unchanged contributes to a
-   shared fee fingerprint and removes channel (3) for their
-   own slots. If a sufficient share of makers adopts the
-   default policy, v7's "exactly one producer slot matches the
-   fingerprint" condition fails on most consumer slots and the
-   analyst falls back to v6. The §9.4 simulator quantifies
-   this: with every maker on the reference default, v7 records
-   essentially no cross-CJ fingerprint reuses, but the
-   user-facing per-CJ residual anonset stays at 0.00. Fee
-   homogenization is a *prerequisite* that lowers the cost of
-   the Tier B and Tier C mitigations (a homogeneous fee
-   surface makes a chain-edge mitigation strictly more
-   powerful), not a standalone defence.
-2. **Disjoint fidelity-bond wallet.** 66 of 95 FBs in our
-   snapshot are already funded from inputs with no observable
-   JM provenance (§5.5). Funding the FB exclusively from a
-   wallet that never receives JM equal outputs or change
-   closes channel (5). One-shot, low-cost, no protocol change.
-3. **Batched non-CJ spends.** Routing off-CJ consolidations
-   through transactions with ≥3 outputs to distinct
-   recipients makes the CIOH assignment ambiguous and is
-   dropped by the precision-first filter. Closes channel (4).
-   A niche tactic for makers with sufficient non-CJ flow.
-
-**Tier B (client patch, no protocol change).**
-
-4. **Maker self-consolidation rounds.** The dominant signal
-   is the change-as-input chain edge (channel 1). A maker
-   client patched to *never* spend a JM-emitted change UTXO
-   directly as a CJ input breaks the edge. The cheapest way
-   to achieve this in practice is for the maker to run a
-   *self-consolidation* CJ on its own change: the maker acts
-   as a taker, with its own change UTXO as the source, and
-   receives a fresh equal output in return. Subsequent CJ
-   slots then draw inputs from that fresh equal output
-   instead of from the original change. The analyst still
-   sees the chain (change UTXO $\to$ consolidation taker
-   input $\to$ fresh equal output), but the fresh equal
-   output is one of ${\geq}2$ producer slots' outputs at the
-   consolidation CJ, so its owner is hidden behind the
-   consolidation CJ's published anonset. The cost is the
-   consolidation tx's miner fee, the maker's share of the
-   consolidation CJ's coordination cost, and the opportunity
-   cost of the locked-up balance during the consolidation
-   delay.
-5. **Taker maker-selection by expected anonymity gain.** A
-   taker who weights maker offers not only by fee but also by
-   the *expected residual anonset* the offer contributes
-   (treating cluster size as a public signal) gets more
-   privacy per CJ at the cost of a higher fee bill. Computing
-   the cluster signal requires a chain crawler against the
-   live mempool; the crawler and the orderbook are both
-   public.
-
-**Tier C (protocol change).**
-
-6. **Equal-output recycling at the protocol level.** Tier B
-   item 4 achieves the same effect for *change* outputs. The
-   symmetric mitigation for *equal* outputs is harder because
-   a maker's equal output naturally sits in the next mixdepth
-   and the maker's next CJ slot can pull from that mixdepth
-   without any extra action. A protocol-level change would
-   require the maker client to refuse to spend a JM-emitted
-   equal output as a CJ input without first laundering it
-   through a self-consolidation CJ analogous to item 4.
-   Equivalently, the client invariant is: *no CJ input is a
-   direct child of a CJ output owned by the same maker*. This
-   is enforceable client-side but is most useful as a
-   protocol-level convention that takers can rely on
-   (otherwise a single non-compliant maker leaks the entire
-   chain for the cohort).
-7. **Orderbook-enforced uniform fee.** Tier A item 1 at the
-   maker side relies on voluntary adoption. A protocol change
-   that has the orderbook reject offers off the canonical
-   policy collapses the fee fingerprint to a single value
-   across the whole cohort. The cost is that the orderbook
-   turns into a single-fee auction, removing the price
-   discovery mechanism that incentivizes maker liquidity at
-   thin amounts.
-
-We deliberately do **not** include the following, which are
-sometimes suggested but do not defeat the attack:
-
-- *Relocate change to a different mixdepth*. The analyst's
-  chain edge is not keyed on mixdepth (see §9.1 signal 1).
-  The change UTXO becomes a chain edge the moment it is
-  spent as an input, regardless of which mixdepth it was
-  resting in.
-- *Batch-consolidate change UTXOs in a non-CJ tx*. Combining
-  several change UTXOs into a single output before the next
-  round consolidates same-wallet UTXOs into one cluster,
-  which is the attack's premise.
-- *Use fresh wallet derivations between rounds*. The chain
-  edges run between UTXOs the wallet owns, regardless of
-  xpub branch.
-- *Run the maker over Tor only*. The whole attack runs on
+- *Relocate change to a different mixdepth* or *use a fresh
+  wallet derivation between rounds*. The analyst's chain edge
+  is keyed on UTXO identity, not on mixdepth or xpub branch.
+  The change UTXO becomes a chain edge the moment it is spent
+  as an input, regardless of where the maker filed it.
+- *Batch-consolidate change UTXOs in a non-CJ tx* before the
+  next round. Combining several change UTXOs into a single
+  output before the next CJ collapses same-wallet UTXOs into
+  one cluster, which is the attack's premise.
+- *Use a JM-disjoint fidelity-bond wallet* (66 of 95 FBs in
+  our snapshot already do). This closes the §5.5 FB-funding
+  edge against a passive analyst that does not interact with
+  the orderbook, but a probing taker that fills its own offer
+  against the maker learns the maker's `cj_addr` and
+  `change_addr` from the encrypted `!ioauth` message (JMP-0005
+  describes this leak as the motivation for its commitment
+  scheme). Useful as a recall-tightening hygiene measure,
+  not as a residual-anonset countermeasure.
+- *Route non-CJ spends through batched (${\geq}3$-output)
+  transactions.* Closes the §5.3-§5.4 CIOH channel but, as a
+  recall multiplier, does not move the residual.
+- *Fee-policy homogenization* alone. A maker running the
+  reference default policy removes signal (3) for its own
+  slots, but the equal-chain edge it produces becomes
+  ambiguous within the producer CJ, *not* absent: the
+  analyst falls back to the change-chain (signal 1) which
+  alone certifies the maker. The §9.4 simulator confirms this
+  (the `uniform_fee` variant moves cluster count but leaves
+  the user-facing residual at 0).
+- *Run the maker over Tor only.* The whole attack runs on
   the public chain.
 
-### 9.3 What a "per-round commitment" would and would not buy
+### 9.3 What a per-round commitment would and would not buy
 
 A common suggestion is that the JoinMarket protocol should
 add a cryptographic per-round commitment that hides which
 producer slot emitted which equal output. Under our threat
-model this would not change the user-facing residual: the
-session-level `!ioauth` message reveals every maker's
-`cj_addr` and `change_addr` to the coordinating taker
-(encrypted point-to-point under the maker-taker NaCl box, so
-other makers do not see it on the wire, but the taker collects
-every maker's mapping), so the equal-output owner permutation
-is *not* private from the taker who runs the round, nor from
-anyone who later replays as a taker against the same maker
-cohort. JMP-0005 (the JoinMarket Proposal on ZKP-based
-output-permutation hiding) documents exactly this leak as the
-motivation for a forthcoming protocol change. What an outside
-analyst recovers from the chain is exactly what a taker can
-already obtain by joining one session.
-The two parts of §9.2 that genuinely close chain edges
-(items 4 and 6) are about output *reuse*, not output
-*identification*; a commitment that hides which producer slot
-owns each equal output within a given CJ does not stop the
-analyst from observing that some equal output of CJ $t$
-appears as an input to CJ $t+1$. This is why we treat the
-equal-chain edge as a recall problem (the analyst must guess
-*which* producer slot emitted the equal output, fee
-fingerprint or no) rather than as an identification problem.
+model this would not change the user-facing residual *on its
+own*: the change-chain edge (signal 1 above) is independent
+of the equal-output permutation and continues to certify
+makers via the within-CJ ILP groupings of §5. A commitment
+on the equal-output permutation closes signal (2) (the
+equal-chain edge becomes unattributable: when an equal output
+of CJ $t$ is spent as an input of CJ $t'$, the analyst no
+longer knows which producer slot of CJ $t$ owned it), but
+signal (1) is unaffected. This is why §9.4 reports the full
+restoration of $n_{eq}$ only when the no-change-as-input
+behavioral change and the no-eq-chain commitment are
+*both* in force.
 
-### 9.4 Countermeasure-effectiveness evaluation
+JMP-0005 (the JoinMarket Proposal on ZKP-based output-
+permutation hiding) targets exactly the signal (2) commitment.
+The `!ioauth` message that the JoinMarket protocol uses today
+already leaks the producer-slot owner permutation to the
+taker (`maker/src/maker/protocol.py:!ioauth`; the message is
+NaCl-boxed between maker and taker so other makers do not see
+it on the wire, but the taker collects every maker's mapping
+and a probing taker can replay this against the orderbook).
+A future protocol change that issues a per-round commitment
+binding each producer slot to its equal-output index, and
+proves correctness in zero knowledge, removes the analyst's
+disambiguation channel. We model the full-strength version of
+this protocol change as the *no-eq-chain* mitigation in §9.4.
 
-The central question for any privacy protocol facing a
-structural attack is whether it is *doomed* (the attack
-signal cannot be removed without breaking the protocol) or
-*hardenable* (a realistic change closes the channel). We ran
-the §6.1 scaled simulator under each conceptual countermeasure
-listed in §9.2 and measured both the clusterer outcome
-(cluster count, recall proxy, precision) and the user-facing
-privacy budget (per-CJ residual anonymity set
-$k(T) = n_{eq}(T) - n_{\text{certified}}(T)$, as defined
-in §7).
+### 9.4 Pairwise countermeasure evaluation
 
-Setup. 150 seed makers, 5 batches of 4,000 rounds each, 10%
-maker churn between batches, $\mathit{makercount} = 4$ per
-CJ (so $n_{eq} = 5$). The simulator emits 100,000 maker
-slots across 20,000 CJs, comparable in scale to the mainnet
-corpus (129,301 slots in 16,890 ILP-decoded CJs). The
-maker's input selection follows joinmarket-ng's
-richest-mixdepth policy (`_select_our_utxos`); see §5 and
-the simulator's `Maker.select_input_mixdepth`. The fee
-grid in the *baseline_varied* arm matches the empirical fee
-distribution of the mainnet orderbook snapshot; the maker
-churn rate is set high enough that the simulator's residual
-distribution is non-degenerate.
+We enumerate the 2x2x2 = 8 simulator configurations over the
+three behavioral / population knobs the JoinMarket maker
+client can actually expose:
 
-Seven variants. The two "edge-strip" variants
-(`cm_no_eq_chain` and `cm_no_same_mixdepth_change`) are
-*conceptual proxies* for the Tier B and Tier C output-recycling
-mitigations: stripping `equal_output` from every slot is the
-limiting case in which no maker ever spends a JM-emitted
-equal output directly as a CJ input (Tier C item 6), and
-stripping `change_output` is the limiting case in which no
-maker ever spends a JM-emitted change UTXO directly as a CJ
-input (Tier B item 4). The simulator is the right tool to
-quantify these proxies because the conceptual question is
-"what residual anonset would the analyst recover if a given
-class of chain edge no longer fired", and the harness lets us
-turn each class of edge on and off independently.
+* **`uniform_fee`** (Tier A, configuration). Every maker
+  advertises the reference client's default policy. Kills the
+  v7 fee fingerprint (signal 3) at the cost of removing
+  inter-maker fee competition.
+* **`no_change_as_input`** (Tier B, behavioral). Makers
+  refuse to spend a JM-emitted change UTXO as a subsequent CJ
+  input. Closes signal (1). Implemented in
+  `src/coinjoin_simulator/agents.py` as a per-maker
+  `forbid_change_as_input` flag; held-back change UTXOs
+  accumulate locally and must be recycled by a separate path
+  (next item) or the maker eventually runs out of spendable
+  liquidity.
+* **`maker_only_cj`** (Tier B, behavioral). The protocol
+  periodically emits a synthetic CJ that consumes one
+  held-back change UTXO per participant and produces fresh
+  equal outputs that re-enter the regular CJ input pool. We
+  schedule one synthetic CJ per four taker-driven CJs with
+  five participants per synthetic CJ; the change outputs of
+  the synthetic CJ are themselves treated as fresh,
+  decorrelating-mixed outputs that *can* be spent as
+  subsequent CJ inputs (otherwise the synthetic CJ stream
+  starves itself).
 
-* `baseline_varied`: today's JoinMarket (every maker draws a
-  distinct fee policy from the 12-row $\mathit{cjfee}_r$ grid
-  $\times$ 6-row $\mathit{cjfee}_a$ grid $\times$ 4-row
-  $\mathit{minsize}$ grid). All §9.1 channels active.
-* `cm_uniform_fee` (Tier A item 1, full): every maker
-  advertises the reference client's default policy
-  ($\mathit{cjfee}_r = 10^{-4}$, $\mathit{cjfee}_a = 0$,
-  $\mathit{minsize} = 27{,}300$ sats). v7's fee-fingerprint
-  edge (channel 3) collapses by construction.
-* `cm_three_policy_pool` (Tier A item 1, partial): every
-  maker picks one of three well-known default policies (low /
-  default / high) at startup. Quantifies the marginal value
-  of full vs. partial fee pooling.
-* `cm_no_two_output_cioh` (Tier A item 3): non-CJ maker
-  spends are always batched to $\geq 3$ outputs, so channel
-  (4) never fires. (Inactive in the simulator, which does
-  not emit non-CJ maker spends; listed for completeness.)
-* `cm_no_eq_chain` (Tier C item 6 proxy): no maker spends a
-  JM-emitted equal output directly as a CJ input. The
-  clusterer loses the equal-chain edge (channel 2).
-* `cm_no_same_mixdepth_change` (Tier B item 4 proxy): no
-  maker spends a JM-emitted change UTXO directly as a CJ
-  input. The clusterer loses the change-chain edge
-  (channel 1). The variant name is historical and refers to
-  the strip transform on the `change_output` slot field; the
-  *conceptual* mitigation is the self-consolidation loop of
-  Tier B item 4, not change relocation across mixdepths
-  (which, as §9.1 notes, does not change what the analyst
-  observes).
-* `cm_combined`: `cm_no_eq_chain` + `cm_no_same_mixdepth_change`
-  + `cm_no_two_output_cioh`. The post-mitigation world in
-  which a maker recycles every JM-emitted output through a
-  laundering step before reuse.
+For each of the eight simulator runs we also post-process the
+slot stream with and without the **`no_eq_chain`** strip,
+which is the idealised version of the JMP-0005 ZKP
+commitment: every slot's `equal_output` reference and the
+per-tx equal-outpoint set are removed, so the v7 fingerprint
+attribution has nothing to attribute to. This gives 16
+variants total. Each run uses 150 seed makers, 5 batches of
+4,000 takers each, 10% maker churn between batches, 5 makers
+per CJ ($n_{eq} = 5$), and the wide fee grid that matches the
+mainnet orderbook snapshot. Precision against simulator
+ground truth is 1.0 in every variant (this is the stricter
+check vs the mainnet §6.2 probe corpus: every output's true
+owner is known here, not just the 35 probed nicks).
 
 Results (clusterer is the v7 loose gate of §5.2; mean
-$n_{eq} = 5.00$ across all variants; precision against the
-simulator's ground-truth maker labels is 1.0 for every
-variant, which is a stricter check than the mainnet §6.2
-probe corpus because every output's true owner is known, not
-just the 35 probed nicks):
+$n_{eq} = 5.00$ across all variants; "throughput" is the
+fraction of the 100k demanded taker slots that the simulator
+executed, with values $>$100% reflecting the addition of
+synthetic maker-only CJ slots above the taker demand). We
+show the eight most informative rows; the full 16-row table
+is at `tmp/v7/countermeasures_v2_summary.md`.
 
-| variant                       | clusters | recall proxy | mean residual | share residual = 1 |
-|-------------------------------|---------:|-------------:|--------------:|-------------------:|
-| `baseline_varied`             |      417 |        0.997 |          0.00 |              0.15% |
-| `cm_uniform_fee`              |    1,070 |        0.991 |          0.00 |              0.00% |
-| `cm_three_policy_pool`        |      365 |        0.997 |          0.00 |              0.01% |
-| `cm_no_two_output_cioh`       |      417 |        0.997 |          0.00 |              0.15% |
-| `cm_no_eq_chain`              |   22,392 |        0.777 |          0.93 |             19.84% |
-| `cm_no_same_mixdepth_change`  |   69,186 |        0.308 |          2.94 |             11.79% |
-| `cm_combined`                 |  100,000 |        0.000 |          5.00 |              0.00% |
+| variant                                                                  | mean residual | share residual=1 | throughput (%) |
+|--------------------------------------------------------------------------|--------------:|-----------------:|---------------:|
+| baseline (today's JM)                                                    |          0.00 |            0.07% |          100.0 |
+| `uniform_fee`                                                            |          0.00 |            0.00% |          100.0 |
+| `no_change_as_input`                                                     |          0.00 |            0.13% |            3.7 |
+| `no_change_as_input` + `maker_only_cj`                                   |          0.00 |            0.00% |          125.0 |
+| `no_eq_chain` (ZKP proxy alone)                                          |          0.83 |           22.23% |          100.0 |
+| `no_change_as_input` + `no_eq_chain`                                     |          5.00 |            0.00% |            3.7 |
+| `no_change_as_input` + `maker_only_cj` + `no_eq_chain`                   |          2.64 |            3.89% |          125.0 |
+| `uniform_fee` + `no_change_as_input` + `maker_only_cj` + `no_eq_chain`   |          2.58 |            5.26% |          125.0 |
 
-![Mean residual anonymity set and share of CJs with residual
-= 1 across the seven countermeasure variants of §9.4 (100k
-slots, $n_{eq} = 5$, v7 loose gate). The two within-protocol
-fee variants sit on top of the baseline; the two
-output-recycling variants move both metrics, and
-`cm_combined` restores the full $n_{eq} = 5$ anonymity set.](figures/countermeasure_effectiveness.svg)
+![Mean residual anonymity set (left) and taker-CJ throughput
+(right) for the curated subset of §9.4 countermeasure
+variants. Blue bars are deployable behavioral or
+configuration changes; red bars require a JMP-0005-class
+equal-output owner commitment (modelled as the `no_eq_chain`
+edge strip). The figure surfaces the central trade-off: the
+only fully-restoring variant under behavioral-only
+mitigations (`no_change_as_input` + `no_eq_chain`) costs 96%
+of taker throughput, and adding `maker_only_cj` to recover
+throughput re-introduces a partial equal-chain leak through
+the synthetic
+CJs.](figures/countermeasure_effectiveness.svg)
 
 Reading the table. *Mean residual* is the per-CJ residual
-anonymity set averaged across all 20,000 simulated CJs (5.00
-means every published equal output remains in the anonset;
-0.00 means every maker is certified and only the taker
-remains).
+anonymity set averaged across all CJs (taker and synthetic),
+where 5.00 means every published equal output remains in the
+anonset and 0.00 means every maker is certified and only the
+taker remains. *Throughput* is realized taker CJs over
+demanded taker CJs; values above 100% account for the
+synthetic maker-only CJ slots that the `maker_only_cj`
+variant adds on top of taker demand.
 
-Three observations stand out:
+Four observations stand out:
 
-1. **In-protocol fee homogenization alone is not a meaningful
-   defence.** `cm_uniform_fee` and `cm_three_policy_pool`
-   change the cluster count (the v7 edge collapses, the
-   clusterer is forced to fall back on v6's change-chain),
-   but the *mean residual* stays at 0.00. Every maker is
-   still certified, because the change-chain edge alone
-   carries the full clustering signal: as long as a maker's
-   change UTXO returns as a future input of the same maker
-   (the protocol invariant), the analyst can chain its slots
-   without ever looking at fees. Tier A item 1 was correctly
-   characterized in earlier drafts as a partial defence; the
-   simulator shows the partial is essentially zero at the
-   user-facing metric.
+1. **No behavioral-only configuration closes the residual.**
+   The two variants without `no_eq_chain` that do not starve
+   liquidity (baseline, `uniform_fee`, and
+   `no_change_as_input` + `maker_only_cj`) all sit at mean
+   residual 0.00. Closing the change channel alone leaves the
+   equal-chain to carry the certification: even with the v7
+   fingerprint collapsed by `uniform_fee`, the equal-chain
+   plus the richest-mixdepth selection invariant identifies
+   each maker on a long enough horizon. The `maker_only_cj`
+   recycling step does not help here because the synthetic
+   CJ's outputs are themselves chainable equal outputs.
+2. **`no_change_as_input` alone is empirically not
+   sustainable as a configuration.** Without a synthetic
+   recycling step, makers run out of spendable liquidity once
+   their change UTXOs accumulate, and only 3.7% of demanded
+   taker CJs execute. Pairing with `maker_only_cj` restores
+   full throughput.
+3. **`no_eq_chain` alone moves the residual but does not
+   restore it.** With the v7 fingerprint commitment in place
+   but the v6 change-chain still firing, mean residual is
+   0.83 and the share of CJs with residual = 1 (single
+   maker certified) is 22%. The change-chain by itself is
+   the rate-limiting channel.
+4. **Both channels must be closed simultaneously.** The
+   maximal residual (5.00, full $n_{eq}$ preserved) appears
+   only when `no_change_as_input` and `no_eq_chain` are
+   *both* applied. Under the deployable-today combination
+   (`no_change_as_input` + `maker_only_cj`) the synthetic
+   CJ stream itself leaks the equal-chain, so the achievable
+   residual under "behavioral + future ZKP" with throughput
+   preserved is 2.64, not 5.00. The remaining gap (2.36 of
+   the 5.00 budget) is the cost of recycling held-back change
+   through a synthetic CJ whose own equal outputs are then
+   spendable as CJ inputs. A protocol-level variant of
+   `maker_only_cj` that also held back the synthetic CJ's
+   equal outputs (and recycled *them* through a second
+   synthetic CJ, and so on) would close this gap but at the
+   cost of indefinitely increasing on-chain volume; we leave
+   this as future work.
 
-2. **The single most effective conceptual mitigation is
-   removing the change-as-input chain edge.**
-   `cm_no_same_mixdepth_change` drops the mean residual from
-   0.00 to 2.94 (out of 5.00): roughly three fifths of the
-   published anonset is preserved per CJ. This is the
-   change-chain edge of §9.1 signal 1; it is the *only*
-   reuse edge in JoinMarket that fires on a deterministic
-   single-producer UTXO, and removing it forces the
-   clusterer back on the equal-chain alone, which is
-   empirically far weaker even when the fee fingerprint can
-   disambiguate the producer slot.
+The qualitative answer to the central question of this
+section, then, is that the JoinMarket protocol is
+*hardenable but not by behavioral changes alone*. Three
+deployment positions can be defended on the basis of the
+table:
 
-3. **Combining the two output-recycling mitigations restores
-   the full published anonset.** `cm_combined` shows a mean
-   residual of 5.00 (== $n_{eq}$): no maker is ever
-   certified by the chain-only adversary. The protocol is
-   hardenable in the strict sense that there exists a
-   concrete set of operational changes (self-consolidation of
-   change UTXOs plus equal-output recycling before reuse)
-   under which the §5 attack pipeline produces zero
-   same-wallet edges in the simulator.
-
-The two output-recycling variants are the load-bearing
-result of this section. They establish that the protocol is
-not *doomed*: a self-consolidation loop of the kind described
-in §9.2 Tier B item 4, paired with the symmetric equal-output
-recycling of §9.2 Tier C item 6, recovers the published
-anonset against the passive on-chain adversary. The
-operational cost of running the self-consolidation loop is
-the bottleneck: a maker who consolidates every change UTXO
-through a self-CJ pays an extra on-chain fee per
-consolidation, locks up the corresponding balance during the
-consolidation delay, and forgoes the offer revenue that the
-balance would otherwise earn. We do not attempt to put a
-precise number on that cost; the qualitative answer is that
-it scales linearly with the maker's CJ volume and is bounded
-by the fee surplus the maker collects on its offers, so a
-maker running at moderate volume can afford it.
+* **Today (no protocol change, no client change):** the
+  user-facing residual under the §5 passive on-chain
+  adversary is 0.00. Fee homogenization and FB-wallet hygiene
+  are useful for recall reasons but do not move this metric.
+* **Client patch, no protocol change:** shipping
+  `no_change_as_input` + `maker_only_cj` is the maximal
+  behavioral-only configuration. It does not move the
+  residual on its own (because the equal-chain still fires),
+  but it is the substrate that the cryptographic mitigation
+  needs in order to reach a non-zero residual at full
+  throughput. Without `maker_only_cj`, the
+  `no_change_as_input` mode is not operationally viable.
+* **Protocol change (JMP-0005-class ZKP):** combined with
+  the client patch, this restores mean residual 2.64 at full
+  throughput, i.e. roughly half of the published $n_{eq}$ is
+  preserved per CJ. Without the client patch (i.e.
+  `no_eq_chain` alone), the residual is 0.83. The client
+  patch is therefore a prerequisite for the ZKP to deliver
+  its full effect.
 
 Simulator caveats. The simulator does not model non-CJ maker
-spends, so the §5.3 / §5.4 CIOH edges and the §5.5 FB-funding
-edge cannot fire in any variant. On the mainnet corpus
-these add roughly 0.01 to the mean residual reduction (the
-v7 to v7.3 delta of §7.1), so the absolute simulator numbers
-*underestimate* the residual reduction the live attack
-achieves; the *relative ordering* across countermeasures is
-the defendable claim. The simulator also does not implement
-maker drop-out due to private liquidity exhaustion, which
-would further fragment the chain on mainnet and favor the
-defender, nor does it model an adaptive adversary that
-combines fee fingerprint with cross-maker behavioral
-heuristics; the conceptual claim is that the *passive*
-on-chain adversary stops being able to certify a maker once
-the chain edges fire on indistinguishable producer sets.
-
-Answer to the central question. **The protocol is not
-doomed, and a deployable client-side change (Tier B item 4,
-maker self-consolidation rounds, no protocol change required)
-already moves the user-facing residual substantially.** Full
-restoration of the published anonset requires the symmetric
-equal-output recycling of Tier C item 6, which is enforceable
-client-side but is most useful as a cohort convention so that
-takers can rely on it. The within-protocol fee hygiene of
-Tier A items 1-3 is a useful prerequisite (it removes the v7
-fingerprint channel and so makes the chain-edge mitigations
-strictly more powerful) but does not, on its own, shift the
-user-facing residual under this passive on-chain threat model.
+spends, so the §5.3-§5.4 CIOH edges and the §5.5 FB-funding
+edge cannot fire in any variant. On the mainnet corpus these
+add roughly 0.01 to the v7-to-v7.3 residual reduction (§7.1),
+so the absolute simulator numbers *underestimate* the residual
+reduction the live attack achieves; the *relative ordering*
+across countermeasures is the defendable claim. The simulator
+also does not model an adaptive adversary that probes the
+orderbook as a taker to learn `cj_addr` and `change_addr`
+from `!ioauth` (the channel that JMP-0005 specifically
+targets), nor a maker drop-out model in which private
+liquidity exhaustion fragments the chain further; both of
+these effects move the realistic residual upward on the
+defender's side.
 
 ## 10. Limitations and future work
 
