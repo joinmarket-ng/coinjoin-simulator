@@ -22,23 +22,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install package
-        run: pip install -e .
-
-      - name: Build curated docs
-        run: |
-          PYTHONPATH=src python -m coinjoin_simulator.publish_site \
-            --mitigation mitigation_experiments.json \
-            --longrun longrun_policy_results.json \
-            --daily daily_cost_study_results.json \
-            --output docs/index.html \
-            --data-output docs/publish_summary.json
-
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
