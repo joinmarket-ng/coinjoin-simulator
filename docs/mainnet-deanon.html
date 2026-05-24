@@ -96,13 +96,13 @@ window.MathJax = {
 <h1>JoinMarket Maker Clustering and Taker Anonymity-Set Reduction</h1>
 <p><em>May 2026 (coinjoin-simulator + joinmarket-analyzer, v7.3 clusterer)</em></p>
 <div class="kpis">
-  <div class="kpi"><b>23,876</b><span>JM CoinJoin txs in corpus (16,890 ILP-decoded)</span></div>
-  <div class="kpi"><b>129,301</b><span>Maker slots recovered</span></div>
-  <div class="kpi"><b>68,998</b><span>v7.3 clusters (23,296 non-trivial, largest 125)</span></div>
-  <div class="kpi safe"><b>0</b><span>Same-CJ precision violations (out of 16,890)</span></div>
-  <div class="kpi"><b>8.65 &rarr; 3.71</b><span>Mean taker anonymity set (published &rarr; v7.3 residual)</span></div>
-  <div class="kpi danger"><b>98.0%</b><span>CJs where at least one maker is certified</span></div>
-  <div class="kpi"><b>3</b><span>Median residual anonymity set (10.8% reach residual = 1, taker alone)</span></div>
+  <div class="kpi"><b>10,581</b><span>JM CoinJoin txs in corpus (7,400 ILP-decoded)</span></div>
+  <div class="kpi"><b>56,614</b><span>Maker slots recovered</span></div>
+  <div class="kpi"><b>26,218</b><span>v7.3 clusters (10,630 non-trivial, largest 117)</span></div>
+  <div class="kpi safe"><b>0</b><span>Same-CJ precision violations (out of 7,400)</span></div>
+  <div class="kpi"><b>8.65 &rarr; 8.22</b><span>Mean taker anonymity set (published &rarr; v7.3 residual)</span></div>
+  <div class="kpi danger"><b>34.5%</b><span>CJs where at least one maker is certified</span></div>
+  <div class="kpi"><b>8</b><span>Median residual anonymity set (0.0% reach residual = 1, taker alone)</span></div>
   <div class="kpi safe"><b>0 / 35</b><span>Cross-nick collisions / probed nicks with v7.3 matches (of 72 probed)</span></div>
 </div>
 <h1 id="joinmarket-maker-wallet-clustering-and-taker-anonymity-set-reduction">JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction</h1>
@@ -254,9 +254,9 @@ k(T) \;=\; n_{eq}(T) \;-\; n_{\text{certified}}(T), $$</div>
 <p>The v6 column is the residual one obtains if change-chain alone were used; under the corrected definition, v6 certifies no equal outputs (it only clusters slots across CJs). The v7 column adds Path A (the fee fingerprint), which attributes 2,996 outpoints univocally to a producer slot. v7.1/v7.2/v7.3 add cluster edges that enable a small number of additional Path-B credits.</p>
 <p>The reduction is bounded: the fee fingerprint univocally identifies 2,996 of the 27,043 cross-CJ equal-output reuses in the window (11.1%). The change-chain clusters maker slots extensively (10,630 non-trivial clusters out of 26,218 total), but those clusters cannot, on their own, identify which equal output came from which slot. The residual drops from 8.65 to 8.22 on average (a 5.0% reduction), 34.5% of CJs leak at least one maker, and 0.0% reach residual = 1.</p>
 <p><img src="figures/anonset_reduction_hist.svg" alt="residual anonymity set histogram (v7.3, 1y window)" loading="lazy"></p>
-<p>The overlay across all five iterations makes the shift visible:</p>
+<p>The overlay across all five iterations makes the per-iteration contribution visible:</p>
 <p><img src="figures/v6_vs_v7_anonset_overlay.svg" alt="v6 through v7.3 anonset overlay" loading="lazy"></p>
-<p>The v7.3 distribution sits slightly to the left of v6: more residual = 8 and residual = 9 CJs, fewer in the long tail above <span class="math inline">$n_{eq}$</span>. The bulk of the distribution remains close to the published <span class="math inline">$n_{eq}$</span>.</p>
+<p>Under the corrected residual metric (Path A plus univocal Path B), the bulk of the reduction comes from the v6 -&gt; v7 step, where the fee-fingerprint attribution edges (Path A) become available: mean residual drops from 8.62 (v6, Path B only) to 8.22 (v7). The later iterations v7.1, v7.2 and v7.3 add cross-CJ cluster edges via CIOH, round-trip hops and fidelity-bond funding respectively; each adds a small number of additional univocal Path B certifications (292, 294, 295 across the 1y window) but the mean residual moves by less than 0.001 because most newly clustered maker slots are not paired with a same-cluster change anchor at a downstream consumer CJ. The taker-facing implication is that the fee fingerprint, not the cluster graph, drives most of the anonymity-set reduction.</p>
 <h3 id="per-n-eq-breakdown">7.2 Per-<span class="math inline">$n_{eq}$</span> breakdown</h3>
 <p>The reduction holds across every round size in the corpus:</p>
 <p><img src="figures/anonset_per_n_eq.svg" alt="mean anonset before and after, by n_eq" loading="lazy"></p>
