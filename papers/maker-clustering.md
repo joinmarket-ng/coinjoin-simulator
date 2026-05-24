@@ -8,8 +8,10 @@
 > anonymity from each other and from the taker, just as the taker
 > wants anonymity from the makers). We ran a passive on-chain
 > experiment on exactly one year of mainnet JoinMarket activity
-> (heights 894,697 to 947,358, 2025-05-01 to 2026-05-01, 7,400
-> ILP-decoded CoinJoins) and clustered maker wallets using only
+> (heights 894,697 to 947,358, 2025-05-01 to 2026-05-01, 10,581
+> JoinMarket CoinJoins, of which 7,400 are fully ILP-decoded and
+> 3,158 yield partial maker slots via greedy preprocessing,
+> $\S 7.4$) and clustered maker wallets using only
 > protocol-forced signals: the JoinMarket mixdepth state machine
 > (a maker's change stays in the source mixdepth and its equal
 > output advances to the next, and the maker chooses the
@@ -33,21 +35,21 @@
 > which maker.
 >
 > The result is more measured than earlier versions of this
-> paper suggested. The mean published anonymity set is 8.65
+> paper suggested. The mean published anonymity set is 8.06
 > equal outputs per CJ; the mean *residual* anonymity set after
 > removing makers whose equal outputs are univocally attributed
 > by the fee fingerprint (or co-spent with a cluster-mate's
-> attributed output in a later CJ) is 8.22. On 34.5% of CJs at
-> least one maker's equal output is certified; on 0% of CJs are
-> all makers certified. The fee fingerprint is therefore a
-> measurable but bounded leak. None of the edges in this attack
-> are probabilistic: every merge is a hard same-wallet conclusion
-> or no merge at all. The single largest remediation is
-> *fee-policy homogenization*: in the simulator, when every maker
-> runs the reference client's default policy the fingerprint
-> cannot disambiguate and the residual rises to its theoretical
-> ceiling $n_{eq}$ ($\S 9.4$). Practical mitigations and their
-> trade-offs are discussed in $\S 9$.
+> attributed output in a later CJ) is 7.55. On 39.6% of CJs at
+> least one maker's equal output is certified; on 3 CJs (0.03%)
+> the round collapses fully to the taker. The fee fingerprint is
+> therefore a measurable but bounded leak. None of the edges in
+> this attack are probabilistic: every merge is a hard
+> same-wallet conclusion or no merge at all. The single largest
+> remediation is *fee-policy homogenization*: in the simulator,
+> when every maker runs the reference client's default policy
+> the fingerprint cannot disambiguate and the residual rises to
+> its theoretical ceiling $n_{eq}$ ($\S 9.4$). Practical
+> mitigations and their trade-offs are discussed in $\S 9$.
 
 ## 1. Scope and motivation
 
@@ -1436,8 +1438,8 @@ the table:
 
 * **Today (no protocol change, no client change):** the
   user-facing residual under the $\S 5$ passive on-chain
-  adversary is $4.51$ in the simulator and $8.22$ on the 1y
-  mainnet corpus. $0.0\%$ of mainnet CJs reach residual $= 1$.
+  adversary is $4.51$ in the simulator and $7.55$ on the 1y
+  mainnet corpus. $0.03\%$ of mainnet CJs reach residual $= 1$.
 * **Client patch (`uniform_fee` default):** the user-facing
   residual rises to $n_{eq}$ in the simulator and would rise
   to $n_{eq}$ minus the small Path B contribution on
@@ -1627,15 +1629,17 @@ The JoinMarket equal-output anonymity set as published per round
 ($n_{eq}$) overstates the protocol's privacy budget against a
 passive on-chain adversary, but the overstatement is bounded.
 A protocol-correct chain-following clusterer at precision = 1.0
-reduces the published anonymity set from a mean of 8.65 to 8.22
-on the 1y mainnet corpus, with 34.5% of CJs losing at least one
-candidate to certified-maker removal and 0.0% of CJs reaching
-residual = 1. The structural channel the attack exploits, namely
-JoinMarket's fee-fingerprint signal ($\S 5.2$) that ties a
-specific equal output of producer CJ $T$ to a specific producer
-slot of $T$, is intrinsic to the protocol and to the typical
-maker fee-advertisement workflow; it is not a fixable
-implementation bug.
+reduces the published anonymity set from a mean of 8.06 to 7.55
+on the 1y mainnet corpus (a 6.3% reduction across 10,464 CJs,
+combining 7,400 full-ILP decompositions with 3,158 partial-ILP
+recoveries per $\S 7.4$), with 39.6% of CJs losing at least one
+candidate to certified-maker removal and 3 CJs (0.03%)
+collapsing fully to the taker. The structural channel the
+attack exploits, namely JoinMarket's fee-fingerprint signal
+($\S 5.2$) that ties a specific equal output of producer CJ $T$
+to a specific producer slot of $T$, is intrinsic to the protocol
+and to the typical maker fee-advertisement workflow; it is not a
+fixable implementation bug.
 
 The precision = 1.0 guarantee is what makes the result
 actionable: under the per-CJ loose gate the clusterer never
@@ -1654,7 +1658,7 @@ gate at a recall cost of about 5%.
 
 The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is not its published
-$n_{eq}$ but the v7.3 residual: today, around 95% of $n_{eq}$.
+$n_{eq}$ but the v7.3 residual: today, around 94% of $n_{eq}$.
 The simulator ($\S 9.4$) identifies the deployable mitigation:
 **fee-policy homogenization** (`uniform_fee`, every maker on the
 reference client's default policy) drives the residual to the
