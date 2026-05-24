@@ -878,12 +878,6 @@ the headline default for the rest of the paper but note that on
 this corpus the choice does not affect the probe-validated
 precision result.
 
-The exact harness is in
-``tmp/v7/eval_simulator_scaled.py`` and the per-run JSON
-reports under ``tmp/v7/simulator_scaled_*.json``. The mainnet
-gate comparison is in ``tmp/v7/mainnet_v7_gates.py`` and
-``tmp/v7/mainnet_v7_probe_gates.py``.
-
 ### 6.2 Active probing of real maker wallets
 
 In late April 2026 we ran three probing rounds against the live
@@ -1235,11 +1229,9 @@ client can actually expose:
   inter-maker fee competition.
 * **`no_change_as_input`** (Tier B, behavioral). Makers
   refuse to spend a JM-emitted change UTXO as a subsequent CJ
-  input. Closes signal (1). Implemented in
-  `src/coinjoin_simulator/agents.py` as a per-maker
-  `forbid_change_as_input` flag; held-back change UTXOs
-  accumulate locally and must be recycled by a separate path
-  (next item) or the maker eventually runs out of spendable
+  input. Closes signal (1). Held-back change UTXOs accumulate
+  locally and must be recycled by a separate path (next item)
+  or the maker eventually runs out of spendable
   liquidity.
 * **`maker_only_cj`** (Tier B, behavioral). The protocol
   periodically emits a synthetic CJ that consumes one
@@ -1271,8 +1263,8 @@ $n_{eq} = 5.00$ across all variants; "throughput" is the
 fraction of the 100k demanded taker slots that the simulator
 executed, with values $>$100% reflecting the addition of
 synthetic maker-only CJ slots above the taker demand). We
-show the eight most informative rows; the full 16-row table
-is at `tmp/v7/countermeasures_v2_summary.md`.
+show the eight most informative rows of the 16-variant
+matrix.
 
 | variant                                                                  | mean residual | share residual=1 | throughput (%) |
 |--------------------------------------------------------------------------|--------------:|-----------------:|---------------:|
