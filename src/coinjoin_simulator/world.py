@@ -62,6 +62,16 @@ class WorldConfig:
     liquidity_wait_minutes: float = DEFAULT_LIQUIDITY_WAIT_MINUTES
     # Allowed ordertypes for taker offer selection (segwit-only by default).
     allowed_ordertypes: frozenset[str] = frozenset({"sw0reloffer", "sw0absoffer"})
+    # §9.2 countermeasure: periodic maker-only CJ. When set to a positive
+    # integer ``k``, the simulator emits one synthetic maker-only CJ
+    # every ``k`` taker-driven CJs. The maker-only CJ consumes one
+    # change UTXO per participating maker and produces one equal output
+    # plus one change output per participant. ``maker_only_cj_n_makers``
+    # sets the participant count (default 5, matching the simulator's
+    # typical taker-CJ size). When ``None``, the synthetic CJ stream is
+    # disabled and the countermeasure is off.
+    maker_only_cj_period: int | None = None
+    maker_only_cj_n_makers: int = 5
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +228,10 @@ class World:
     maker_id_by_utxo_ever: dict[str, str] = field(default_factory=dict)
     utxo_value_by_id: dict[str, int] = field(default_factory=dict)
     _queue: list[_Event] = field(default_factory=list)
+    # §9.2 maker-only-CJ counter: counts taker-driven CJs emitted; the
+    # synthetic maker-only CJ fires every ``maker_only_cj_period``
+    # increments when that config knob is set.
+    _taker_cj_count: int = 0
 
     @classmethod
     def from_components(
@@ -371,6 +385,12 @@ class World:
         # 8. Advance taker schedule + reschedule next event.
         taker.advance(success=True)
         self._maybe_reschedule(ev.taker_idx, entry.wait_minutes)
+
+        # 9. §9.2 maker-only-CJ tick (optional): fires every K taker CJs.
+        self._taker_cj_count += 1
+        period = self.config.maker_only_cj_period
+        if period is not None and period > 0 and self._taker_cj_count % period == 0:
+            self._maybe_emit_maker_only_cj()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -620,6 +640,12 @@ class World:
                 self.maker_id_by_utxo[change_out.output_id] = maker.counterparty
                 self.maker_id_by_utxo_ever[change_out.output_id] = maker.counterparty
                 self.utxo_value_by_id[change_out.output_id] = change
+                # §9.2 ``forbid_change_as_input`` mask: register the new
+                # change UTXO so subsequent fills cannot consume it. The
+                # UTXO is still present in ``maker.utxos`` so a periodic
+                # maker-only CJ can sweep it later.
+                if maker.forbid_change_as_input:
+                    maker.held_back_change_ids.add(change_out.output_id)
 
     def _update_payment_record(self, taker: PaymentTaker, tx: Tx) -> None:
         # Find the open record for this taker.
@@ -663,4 +689,143 @@ class World:
             network_fee_sats=0,
         )
         self.txs.append(payout)
+        return txid
+
+    # ------------------------------------------------------------------
+    # §9.2 maker-only CJ
+    # ------------------------------------------------------------------
+
+    def _maybe_emit_maker_only_cj(self) -> str | None:
+        """Emit one synthetic maker-only CJ when conditions allow.
+
+        The CJ consumes one held-back change UTXO from each of
+        ``config.maker_only_cj_n_makers`` distinct makers and produces
+        one equal output (``MAKER_CJ``) per participant plus one change
+        output (``MAKER_CHANGE``) per participant. The equal-output
+        amount is the largest amount ``a`` such that every participant
+        can cover ``a + fee_per_maker``, where ``fee_per_maker`` is a
+        notional 0 in this model (the maker-only CJ is a pure peer-to-
+        peer mix with no taker subsidy).
+
+        Returns the txid of the synthetic CJ, or ``None`` if too few
+        makers have held-back change to participate. The CJ output
+        labels follow the same ``MAKER_CJ`` / ``MAKER_CHANGE`` roles as
+        a regular CJ, so the v7 clusterer and ``_extract_slots`` treat
+        it on equal footing.
+        """
+        n_needed = self.config.maker_only_cj_n_makers
+        # Collect (maker, biggest held-back utxo) candidates.
+        candidates: list[tuple[Maker, Utxo]] = []
+        for maker in self.makers:
+            if not maker.forbid_change_as_input:
+                continue
+            held = maker.held_back_utxos()
+            if not held:
+                continue
+            # Pick the largest held-back UTXO to maximise the equal-output amount.
+            biggest = max(held, key=lambda u: u.value_sats)
+            candidates.append((maker, biggest))
+        if len(candidates) < n_needed:
+            return None
+        # Deterministic order: largest input first; tiebreak by counterparty.
+        candidates.sort(key=lambda mu: (-mu[1].value_sats, mu[0].counterparty))
+        chosen = candidates[:n_needed]
+        # Equal-output amount: the smallest input value minus a notional
+        # per-maker fee. Pure maker-only CJ has no taker, so the fee
+        # absorbed by the network is shared. We use 0 sats fee per maker
+        # and set ``eq_amt`` to (min_input // 2) to leave room for a
+        # non-trivial change. This keeps every participant's change
+        # strictly positive and large enough to be re-emitted later.
+        min_input = min(u.value_sats for _m, u in chosen)
+        eq_amt = max(1, min_input // 2)
+
+        block, tx_idx = self._allocate_tx_slot()
+        txid = _short_id("tx-mo-")
+
+        inputs: list[str] = []
+        input_vals: list[int] = []
+        outputs: list[TxOutput] = []
+        maker_cps: list[str] = []
+        # Per-maker mixdepth bookkeeping (so post-CJ updates know the
+        # source and destination mixdepth).
+        per_maker: list[tuple[Maker, Utxo, int, int]] = []
+        for maker, u in chosen:
+            src_mix = u.mixdepth
+            dest_mix = (src_mix + 1) % (maker.max_mixdepth + 1)
+            per_maker.append((maker, u, src_mix, dest_mix))
+            inputs.append(u.utxo_id)
+            input_vals.append(u.value_sats)
+            maker_cps.append(maker.counterparty)
+            outputs.append(
+                TxOutput(
+                    output_id=_short_id("o-mo-"),
+                    value_sats=eq_amt,
+                    role=OutputRole.MAKER_CJ,
+                    owner=maker.counterparty,
+                    mixdepth=dest_mix,
+                ),
+            )
+            change_val = u.value_sats - eq_amt
+            outputs.append(
+                TxOutput(
+                    output_id=_short_id("o-mo-"),
+                    value_sats=change_val,
+                    role=OutputRole.MAKER_CHANGE,
+                    owner=maker.counterparty,
+                    mixdepth=src_mix,
+                ),
+            )
+        tx = Tx(
+            txid=txid,
+            block_height=block,
+            tx_index=tx_idx,
+            taker_id="MAKER_ONLY_CJ",
+            maker_counterparties=tuple(maker_cps),
+            inputs=tuple(inputs),
+            input_values=tuple(input_vals),
+            outputs=tuple(outputs),
+            cj_amount_sats=eq_amt,
+            total_cj_fee_sats=0,
+            network_fee_sats=0,
+        )
+        self.txs.append(tx)
+
+        # Apply state: remove consumed UTXOs (and their held-back marks),
+        # mint the new equal and change outputs (re-marking change as
+        # held back so it stays sweep-only).
+        out_iter = iter(tx.outputs)
+        for maker, u, src_mix, dest_mix in per_maker:
+            cj_out = next(out_iter)
+            change_out = next(out_iter)
+            maker.utxos[src_mix] = [
+                x for x in maker.utxos.get(src_mix, []) if x.utxo_id != u.utxo_id
+            ]
+            maker.held_back_change_ids.discard(u.utxo_id)
+            self.maker_id_by_utxo.pop(u.utxo_id, None)
+            # Mint CJ output -> dest mixdepth. This is a fresh equal
+            # output and is freely spendable in subsequent taker CJs.
+            maker.utxos.setdefault(dest_mix, []).append(
+                Utxo(utxo_id=cj_out.output_id, value_sats=cj_out.value_sats, mixdepth=dest_mix),
+            )
+            self.maker_id_by_utxo[cj_out.output_id] = maker.counterparty
+            self.maker_id_by_utxo_ever[cj_out.output_id] = maker.counterparty
+            self.utxo_value_by_id[cj_out.output_id] = cj_out.value_sats
+            # Mint change -> src mixdepth, freshly mixed by the maker-only
+            # CJ. The change output is NOT held-back: the joint mix has
+            # decorrelated it from the maker's previous coin, so it can
+            # safely re-enter the regular CJ input pool. This is the
+            # mechanism by which a periodic maker-only CJ recycles change
+            # liquidity back into the taker-CJ market without
+            # reintroducing the change-as-input clustering signal.
+            if change_out.value_sats > 0:
+                maker.utxos.setdefault(src_mix, []).append(
+                    Utxo(
+                        utxo_id=change_out.output_id,
+                        value_sats=change_out.value_sats,
+                        mixdepth=src_mix,
+                    ),
+                )
+                self.maker_id_by_utxo[change_out.output_id] = maker.counterparty
+                self.maker_id_by_utxo_ever[change_out.output_id] = maker.counterparty
+                self.utxo_value_by_id[change_out.output_id] = change_out.value_sats
         return txid

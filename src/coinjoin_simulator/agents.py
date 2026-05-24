@@ -102,6 +102,14 @@ class Maker:
     utxos: dict[int, list[Utxo]] = field(default_factory=dict)
     max_mixdepth: int = DEFAULT_MAX_MIXDEPTH
     rng: random.Random = field(default_factory=random.Random)
+    # §9 maker-clustering countermeasure: when ``forbid_change_as_input``
+    # is true, every utxo id appended to ``held_back_change_ids`` is
+    # excluded from CJ input selection. The UTXOs themselves remain in
+    # ``utxos`` so that an external sweeper (e.g. a periodic maker-only
+    # CJ) can still consume them. This implements the "equal-output-only
+    # inputs" rule discussed in §9.2.
+    forbid_change_as_input: bool = False
+    held_back_change_ids: set[str] = field(default_factory=set)
 
     @classmethod
     def from_profile(
@@ -139,15 +147,40 @@ class Maker:
     # ------------------------------------------------------------------
 
     def total_balance_sats(self) -> int:
-        return sum(u.value_sats for ms in self.utxos.values() for u in ms)
+        return sum(
+            u.value_sats
+            for ms in self.utxos.values()
+            for u in ms
+            if not (self.forbid_change_as_input and u.utxo_id in self.held_back_change_ids)
+        )
 
     def balance_in_mixdepth(self, mixdepth: int) -> int:
-        return sum(u.value_sats for u in self.utxos.get(mixdepth, []))
+        return sum(
+            u.value_sats
+            for u in self.utxos.get(mixdepth, [])
+            if not (self.forbid_change_as_input and u.utxo_id in self.held_back_change_ids)
+        )
 
     def largest_mixdepth(self) -> int:
         if not self.utxos:
             return 0
         return max(self.utxos, key=lambda m: self.balance_in_mixdepth(m))
+
+    def held_back_utxos(self, mixdepth: int | None = None) -> list[Utxo]:
+        """Return the maker's held-back change UTXOs (for maker-only CJ sweeps).
+
+        Only meaningful when ``forbid_change_as_input`` is set. If
+        ``mixdepth`` is given, restricts to that mixdepth.
+        """
+        result: list[Utxo] = []
+        if mixdepth is None:
+            for ms in self.utxos.values():
+                result.extend(u for u in ms if u.utxo_id in self.held_back_change_ids)
+        else:
+            result.extend(
+                u for u in self.utxos.get(mixdepth, []) if u.utxo_id in self.held_back_change_ids
+            )
+        return result
 
     # ------------------------------------------------------------------
     # Offer announcement (yg-privacyenhanced.py:46-107)
@@ -235,7 +268,17 @@ class Maker:
         if m is None:
             return None
         # Greedy: take the largest UTXOs first until we cover the amount.
-        sorted_utxos = sorted(self.utxos[m], key=lambda u: u.value_sats, reverse=True)
+        # Under the §9 ``forbid_change_as_input`` countermeasure, the maker
+        # must not spend held-back change outputs as CJ inputs; those are
+        # filtered here before sorting so the only inputs reaching the
+        # CJ are equal-output coins (or initial / FB-funded coins, which
+        # are never appended to ``held_back_change_ids``).
+        candidates = [
+            u
+            for u in self.utxos[m]
+            if not (self.forbid_change_as_input and u.utxo_id in self.held_back_change_ids)
+        ]
+        sorted_utxos = sorted(candidates, key=lambda u: u.value_sats, reverse=True)
         consumed: list[Utxo] = []
         total = 0
         for u in sorted_utxos:

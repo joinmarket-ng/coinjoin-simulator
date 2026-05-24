@@ -455,3 +455,88 @@ def test_payment_taker_with_varying_makercount(makercount: int) -> None:
     assert len(res.txs) == 1
     assert len(res.txs[0].maker_counterparties) == makercount
     assert sum(1 for o in res.txs[0].outputs if o.role == OutputRole.MAKER_CJ) == makercount
+
+
+# ---------------------------------------------------------------------------
+# §9 countermeasures: forbid_change_as_input and maker_only_cj_period
+# ---------------------------------------------------------------------------
+
+
+def _build_makers_no_change_as_input(n: int, *, seed: int = 0) -> list[Maker]:
+    makers = _build_makers(n, seed=seed)
+    for m in makers:
+        m.forbid_change_as_input = True
+    return makers
+
+
+def test_forbid_change_as_input_excludes_change_from_next_fill() -> None:
+    """Two back-to-back CJs from the same maker: the second must not consume
+    the first CJ's change output as input."""
+    makers = _build_makers_no_change_as_input(8, seed=42)
+    taker_a = _payment_taker(seed=1, amount_sats=1_000_000, makercount=4)
+    taker_b = _payment_taker(seed=2, amount_sats=1_000_000, makercount=4)
+    cfg = WorldConfig(seed=7)
+    res = World.from_components(config=cfg, makers=makers, takers=[taker_a, taker_b]).run()
+    assert len(res.txs) == 2
+    tx1, tx2 = res.txs
+    # Identify change utxos from tx1 owned by makers.
+    change_ids_tx1 = {o.output_id for o in tx1.outputs if o.role == OutputRole.MAKER_CHANGE}
+    assert change_ids_tx1, "no MAKER_CHANGE outputs in tx1 (precondition for the test)"
+    # tx2 must not consume any of them.
+    assert not (set(tx2.inputs) & change_ids_tx1), (
+        f"forbid_change_as_input violated: tx2 spent {set(tx2.inputs) & change_ids_tx1}"
+    )
+
+
+def test_forbid_change_as_input_is_off_by_default() -> None:
+    """Without the flag, a maker is free to consume its own change UTXO
+    again. This is just a regression guard so we don't accidentally
+    enable the countermeasure for callers that did not opt in."""
+    makers = _build_makers(8, seed=42)
+    for m in makers:
+        assert m.forbid_change_as_input is False
+        assert m.held_back_change_ids == set()
+
+
+def test_maker_only_cj_period_emits_synthetic_cjs() -> None:
+    """With period=2 and the change-mask on, every two taker CJs must be
+    followed by exactly one synthetic maker-only CJ (assuming the makers
+    have accumulated enough held-back change to participate)."""
+    makers = _build_makers_no_change_as_input(8, seed=42)
+    takers = [_payment_taker(seed=100 + i, amount_sats=1_000_000, makercount=4) for i in range(6)]
+    cfg = WorldConfig(seed=7, maker_only_cj_period=2, maker_only_cj_n_makers=3)
+    res = World.from_components(config=cfg, makers=makers, takers=takers).run()
+    # 6 taker CJs => 3 maker-only CJ ticks; the first one fires once any
+    # maker has at least one held-back change UTXO, which happens after
+    # the first taker CJ. So we expect: 6 taker CJs + 3 synthetic = 9.
+    taker_txs = [tx for tx in res.txs if tx.taker_id != "MAKER_ONLY_CJ"]
+    synth_txs = [tx for tx in res.txs if tx.taker_id == "MAKER_ONLY_CJ"]
+    assert len(taker_txs) == 6
+    assert len(synth_txs) == 3
+    # Every synthetic CJ must have exactly maker_only_cj_n_makers
+    # participants, MAKER_CJ + MAKER_CHANGE outputs balanced.
+    for tx in synth_txs:
+        assert len(tx.maker_counterparties) == 3
+        cjs = [o for o in tx.outputs if o.role == OutputRole.MAKER_CJ]
+        chgs = [o for o in tx.outputs if o.role == OutputRole.MAKER_CHANGE]
+        assert len(cjs) == 3
+        assert len(chgs) == 3
+        # Each maker contributes exactly one input (their largest held-back UTXO).
+        assert len(tx.inputs) == 3
+        # Mass conservation per maker (input value == cj + change).
+        for cj, chg, in_val in zip(cjs, chgs, tx.input_values, strict=True):
+            assert cj.value_sats + chg.value_sats == in_val
+        # Owners on cj and change outputs match.
+        cj_owners = sorted(o.owner for o in cjs)
+        chg_owners = sorted(o.owner for o in chgs)
+        assert cj_owners == chg_owners
+
+
+def test_maker_only_cj_disabled_by_default() -> None:
+    """No synthetic CJs when ``maker_only_cj_period`` is None."""
+    makers = _build_makers_no_change_as_input(8, seed=42)
+    takers = [_payment_taker(seed=100 + i, amount_sats=1_000_000, makercount=4) for i in range(4)]
+    cfg = WorldConfig(seed=7)  # maker_only_cj_period defaults to None.
+    res = World.from_components(config=cfg, makers=makers, takers=takers).run()
+    assert all(tx.taker_id != "MAKER_ONLY_CJ" for tx in res.txs)
+    assert len(res.txs) == 4
