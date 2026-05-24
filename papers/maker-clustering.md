@@ -1057,14 +1057,24 @@ one maker, and 0.0% reach residual = 1.
 
 ![residual anonymity set histogram (v7.3, 1y window)](figures/anonset_reduction_hist.svg)
 
-The overlay across all five iterations makes the shift visible:
+The overlay across all five iterations makes the per-iteration
+contribution visible:
 
 ![v6 through v7.3 anonset overlay](figures/v6_vs_v7_anonset_overlay.svg)
 
-The v7.3 distribution sits slightly to the left of v6: more
-residual = 8 and residual = 9 CJs, fewer in the long tail above
-$n_{eq}$. The bulk of the distribution remains close to the
-published $n_{eq}$.
+Under the corrected residual metric (Path A plus univocal Path B),
+the bulk of the reduction comes from the v6 -> v7 step, where the
+fee-fingerprint attribution edges (Path A) become available: mean
+residual drops from 8.62 (v6, Path B only) to 8.22 (v7). The
+later iterations v7.1, v7.2 and v7.3 add cross-CJ cluster edges
+via CIOH, round-trip hops and fidelity-bond funding respectively;
+each adds a small number of additional univocal Path B
+certifications (292, 294, 295 across the 1y window) but the mean
+residual moves by less than 0.001 because most newly clustered
+maker slots are not paired with a same-cluster change anchor at a
+downstream consumer CJ. The taker-facing implication is that the
+fee fingerprint, not the cluster graph, drives most of the
+anonymity-set reduction.
 
 ### 7.2 Per-$n_{eq}$ breakdown
 
