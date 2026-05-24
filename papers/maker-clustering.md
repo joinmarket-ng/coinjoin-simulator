@@ -355,14 +355,14 @@ The full pass over the 129,301 mainnet slots produces:
 | metric                                       | v6        | v7        | v7.1      | v7.2      | v7.3      |
 |----------------------------------------------|----------:|----------:|----------:|----------:|----------:|
 | total clusters                               | 74,471    | 69,184    | 69,103    | 69,003    | 68,998    |
-| singleton clusters                           | 50,126    | 45,871    | 45,790    | 45,706    | 45,702    |
-| non-trivial clusters (size >= 2)             | 24,345    | 23,313    | 23,313    | 23,297    | 23,296    |
+| singleton clusters                           | 50,126    | 45,871    | 45,789    | 45,706    | 45,702    |
+| non-trivial clusters (size >= 2)             | 24,345    | 23,313    | 23,314    | 23,297    | 23,296    |
 | largest cluster                              | 91 slots  | 125 slots | 125 slots | 125 slots | 125 slots |
 | same-CJ slot collisions (must-not-link violations) | 0   | 0         | 0         | 0         | 0         |
 
 v7 absorbs 5,287 v6 clusters into existing ones through the
 equal-chain edge. v7.1 adds 127 cross-CJ unions through the
-non-CJ co-spend edge (§5.3), removing 81 further singletons. v7.2
+non-CJ co-spend edge (§5.3), removing 82 further singletons. v7.2
 adds 153 cross-CJ unions through the non-CJ round-trip edge
 (§5.4), removing 100 more clusters. v7.3 adds 6 cross-cluster
 unions through the fidelity-bond funding-tx CIOH edge (§5.5),
@@ -391,9 +391,15 @@ $$
 \mathit{fee}(a) \;=\;
 \begin{cases}
 \mathit{cjfee}_a & \text{(absolute maker)} \\
-\lfloor \mathit{cjfee}_r \cdot a \rceil & \text{(relative maker, sat-rounded)}.
+\mathrm{round\_half\_even}(\mathit{cjfee}_r \cdot a) & \text{(relative maker)},
 \end{cases}
 $$
+
+where the relative case uses banker's rounding to the nearest
+satoshi, matching JoinMarket-NG's
+`Decimal(cjfee) * Decimal(amount)`.`quantize(Decimal(1))`
+in `jmcore/src/jmcore/bitcoin.py` (and the equivalent path in
+joinmarket-clientserver).
 
 The ILP recovers this realized fee per slot from the input total,
 equal output, and change output. The fee is observable but not by
@@ -414,9 +420,11 @@ admissible interpretations:
 
 - *absolute* match: $f_i = f_c$ (so $S_i$'s policy is
   $\mathit{cjfee}_a = f_c$);
-- *relative* match: $f_i / a_T \approx f_c / a_S$ within a 1 ppm
-  tolerance (so $S_i$'s policy is
-  $\mathit{cjfee}_r = f_c / a_S$).
+- *relative* match: $f_i / a_T$ and $f_c / a_S$ agree to the
+  nearest part per million (each side is rounded to its
+  nearest integer ppm via banker's rounding and the two
+  integers must match), so $S_i$'s implied policy is
+  $\mathit{cjfee}_r = f_c / a_S$ to that resolution.
 
 v7 admits three gate strengths, in increasing order of
 precision and decreasing order of recall. All three share the
@@ -438,13 +446,15 @@ collided with the consumer fingerprint under per-announcement fee
 jitter (\u00a76.1).
 
 **Corpus-unique gate.** An edge is added only when the chosen
-$S_i$'s fingerprint $(f_i, f_i / a_T)$ is, across the entire
-corpus of v7-enriched slots, free of doppelgangers: no slot
-outside $T$ and outside the consumer $c$ carries the same
-absolute *and* the same relative fingerprint. This is strictly
-stronger than per-CJ univocality because it requires the
-producer's fee policy to be unique in the corpus, not merely
-unique inside $T$. The corpus-unique gate is the one that
+$S_i$'s fingerprint is, across the entire corpus of v7-enriched
+slots, free of doppelgangers: no slot outside $T$ and outside
+the consumer $c$ carries the same absolute *or* the same
+relative fingerprint. This is strictly stronger than per-CJ
+univocality because it requires the producer's fee policy to
+be unique in the corpus, not merely unique inside $T$, and the
+"or" makes the reject conservative (any single-axis collision
+elsewhere in the corpus is enough to drop the edge). The
+corpus-unique gate is the one that
 restores precision = 1.0 in the controlled simulator
 experiment (\u00a76.1, Table). The two per-CJ gates are
 heuristic: they preserve precision under sparse fingerprint
@@ -1251,11 +1261,18 @@ A common suggestion is that the JoinMarket protocol should
 add a cryptographic per-round commitment that hides which
 producer slot emitted which equal output. Under our threat
 model this would not change the user-facing residual: the
-session-level `!ioauth` message already reveals every maker's
-`cj_addr` to all participants, so the equal-output owner
-permutation is *not* private from anyone who can join the
-session as a taker. What an outside analyst recovers from
-the chain is exactly what the participants already know.
+session-level `!ioauth` message reveals every maker's
+`cj_addr` and `change_addr` to the coordinating taker
+(encrypted point-to-point under the maker-taker NaCl box, so
+other makers do not see it on the wire, but the taker collects
+every maker's mapping), so the equal-output owner permutation
+is *not* private from the taker who runs the round, nor from
+anyone who later replays as a taker against the same maker
+cohort. JMP-0005 (the JoinMarket Proposal on ZKP-based
+output-permutation hiding) documents exactly this leak as the
+motivation for a forthcoming protocol change. What an outside
+analyst recovers from the chain is exactly what a taker can
+already obtain by joining one session.
 The two parts of §9.2 that genuinely close chain edges
 (items 4 and 6) are about output *reuse*, not output
 *identification*; a commitment that hides which producer slot
