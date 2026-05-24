@@ -26,14 +26,14 @@ TMP = ROOT / "tmp"
 OUT = ROOT / "papers" / "figures"
 OUT.mkdir(exist_ok=True)
 
-ANON_V6 = TMP / "v7" / "anonset_reduction_v6_v2_1y.json"
-ANON_V7 = TMP / "v7" / "anonset_reduction_v7_v2_1y.json"
-ANON_V71 = TMP / "v7" / "anonset_reduction_v71_v2_1y.json"
-ANON_V72 = TMP / "v7" / "anonset_reduction_v72_v2_1y.json"
-ANON_V73 = TMP / "v7" / "anonset_reduction_v73_v2_1y.json"
+ANON_V6 = TMP / "v7" / "anonset_reduction_v6_v2_1y_partial.json"
+ANON_V7 = TMP / "v7" / "anonset_reduction_v7_v2_1y_partial.json"
+ANON_V71 = TMP / "v7" / "anonset_reduction_v71_v2_1y_partial.json"
+ANON_V72 = TMP / "v7" / "anonset_reduction_v72_v2_1y_partial.json"
+ANON_V73 = TMP / "v7" / "anonset_reduction_v73_v2_1y_partial.json"
 CMP = TMP / "v6" / "v5_vs_v6_comparison.json"
 PROBE = TMP / "v7" / "probe_validation_v73.json"
-V73_REPORT = TMP / "v7" / "mainnet_v73_report.json"
+V73_REPORT = TMP / "v7" / "mainnet_v73_report_1y_partial.json"
 ATTR = TMP / "v7" / "v7_attribution_stats.json"
 
 COL = {

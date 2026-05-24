@@ -374,8 +374,10 @@ def _load_kpis() -> dict[str, Any]:
         "probe_nicks_matched": None,
         "probe_cross_nick_collisions": None,
     }
-    # v7.3 cluster report (1y window: heights 894,697..947,358)
-    v7_report_p = TMP / "v7" / "mainnet_v73_report_1y.json"
+    # v7.3 cluster report (1y window with partial-ILP slots merged)
+    v7_report_p = TMP / "v7" / "mainnet_v73_report_1y_partial.json"
+    if not v7_report_p.exists():
+        v7_report_p = TMP / "v7" / "mainnet_v73_report_1y.json"
     if not v7_report_p.exists():
         v7_report_p = TMP / "v7" / "mainnet_v73_report.json"
     if v7_report_p.exists():
@@ -392,8 +394,10 @@ def _load_kpis() -> dict[str, Any]:
         kpis["largest_cluster"] = s.get("largest_cluster_size")
         kpis["n_same_cj_collisions"] = s.get("same_cj_collisions", 0)
 
-    # Anonymity-set reduction (v7.3 headline, 1y corrected residual metric)
-    anon_p = TMP / "v7" / "anonset_reduction_v73_v2_1y.json"
+    # Anonymity-set reduction (v7.3 headline, 1y corrected residual with partial-ILP)
+    anon_p = TMP / "v7" / "anonset_reduction_v73_v2_1y_partial.json"
+    if not anon_p.exists():
+        anon_p = TMP / "v7" / "anonset_reduction_v73_v2_1y.json"
     if not anon_p.exists():
         anon_p = TMP / "v7" / "anonset_reduction_v73.json"
     if anon_p.exists():
