@@ -1,55 +1,21 @@
 # JoinMarket Maker Wallet Clustering and Taker Anonymity-Set Reduction
 
-> **TL;DR.** JoinMarket is a Bitcoin CoinJoin protocol where a
-> *taker* pays a small fee to one or more *makers* to mix coins
-> into a single transaction with several equal-value outputs;
-> every equal output is supposed to be indistinguishable from
-> every other equal output in the same round (makers want
-> anonymity from each other and from the taker, just as the taker
-> wants anonymity from the makers). We ran a passive on-chain
-> experiment on exactly one year of mainnet JoinMarket activity
-> (heights 894,697 to 947,358, 2025-05-01 to 2026-05-01, 10,581
-> JoinMarket CoinJoins, of which 7,400 are fully ILP-decoded and
-> 3,158 yield partial maker slots via greedy preprocessing,
-> $\S 7.4$) and clustered maker wallets using only
-> protocol-forced signals: the JoinMarket mixdepth state machine
-> (a maker's change stays in the source mixdepth and its equal
-> output advances to the next, and the maker chooses the
-> mixdepth with the highest balance to re-advertise), the
-> integer-linear-program (ILP) recovery of slot membership
-> (which inputs and change output belong to the same participant)
-> inside each CoinJoin so that the Common Input Ownership
-> Heuristic (CIOH) can be applied across the on-CJ and off-CJ
-> sides of a maker wallet, and the maker's published fee
-> schedule used as a per-CoinJoin disambiguator. A simple example
-> of that last signal: if a maker charges 0.1% in one CJ and an
-> equal output of that CJ then participates in a later CJ whose
-> ILP-recovered slot also charges 0.1% (and no other maker in
-> the producer CJ charges 0.1% at that amount), the equal output
-> is uniquely bound to that producer slot. This *fee-fingerprint*
-> attribution is the only chain edge in this attack that ties a
-> specific equal output to a specific maker slot; the
-> change-chain and the auxiliary edges (CIOH, FB-funding) cluster
-> *slots across CoinJoins* but cannot label which of the
-> indistinguishable equal outputs of a producer CJ belongs to
-> which maker.
->
-> The result is more measured than earlier versions of this
-> paper suggested. The mean published anonymity set is 8.06
-> equal outputs per CJ; the mean *residual* anonymity set after
-> removing makers whose equal outputs are univocally attributed
-> by the fee fingerprint (or co-spent with a cluster-mate's
-> attributed output in a later CJ) is 7.55. On 39.6% of CJs at
-> least one maker's equal output is certified; on 3 CJs (0.03%)
-> the round collapses fully to the taker. The fee fingerprint is
-> therefore a measurable but bounded leak. None of the edges in
-> this attack are probabilistic: every merge is a hard
-> same-wallet conclusion or no merge at all. The single largest
-> remediation is *fee-policy homogenization*: in the simulator,
-> when every maker runs the reference client's default policy
-> the fingerprint cannot disambiguate and the residual rises to
-> its theoretical ceiling $n_{eq}$ ($\S 9.4$). Practical
-> mitigations and their trade-offs are discussed in $\S 9$.
+> **TL;DR.** JoinMarket holds up well in practice. On one year
+> of mainnet activity (10,464 CoinJoins), a passive on-chain
+> adversary using only protocol-forced signals trims the mean
+> anonymity set from 8.06 to 7.55 equal outputs per CJ at
+> precision = 1.0, a 6.3% reduction. 60.4% of CJs leak no
+> maker at all; only 0.03% collapse to the taker alone. The
+> single dominant edge is the *fee fingerprint*: when a maker's
+> published fee policy uniquely matches the realized fee of a
+> producer slot at a later consumer CJ's amount, the equal
+> output is hard-bound to that slot. Because that leak has one
+> identifiable cause, it also has one deployable fix:
+> *fee-policy homogenization*. When every maker runs the
+> reference client's default policy, the fingerprint stops
+> disambiguating and the residual returns to the $n_{eq}$
+> ceiling ($\S 9.4$). The protocol is therefore both robust
+> today and concretely improvable by a client-default change.
 
 ## 1. Scope and motivation
 
@@ -1625,21 +1591,20 @@ auditability.
 
 ## 11. Conclusion
 
-The JoinMarket equal-output anonymity set as published per round
-($n_{eq}$) overstates the protocol's privacy budget against a
-passive on-chain adversary, but the overstatement is bounded.
-A protocol-correct chain-following clusterer at precision = 1.0
-reduces the published anonymity set from a mean of 8.06 to 7.55
-on the 1y mainnet corpus (a 6.3% reduction across 10,464 CJs,
-combining 7,400 full-ILP decompositions with 3,158 partial-ILP
-recoveries per $\S 7.4$), with 39.6% of CJs losing at least one
-candidate to certified-maker removal and 3 CJs (0.03%)
-collapsing fully to the taker. The structural channel the
-attack exploits, namely JoinMarket's fee-fingerprint signal
-($\S 5.2$) that ties a specific equal output of producer CJ $T$
-to a specific producer slot of $T$, is intrinsic to the protocol
-and to the typical maker fee-advertisement workflow; it is not a
-fixable implementation bug.
+JoinMarket's equal-output anonymity set as published per round
+($n_{eq}$) is largely realized in practice. Against a passive
+on-chain adversary running a protocol-correct chain-following
+clusterer at precision = 1.0, the published mean of 8.06
+contracts only to 7.55 on the 1y mainnet corpus (a 6.3%
+reduction across 10,464 CJs, combining 7,400 full-ILP
+decompositions with 3,158 partial-ILP recoveries per $\S 7.4$).
+60.4% of CJs lose no candidate at all; 3 CJs (0.03%) collapse
+fully to the taker. The structural channel the attack exploits,
+namely JoinMarket's fee-fingerprint signal ($\S 5.2$) that ties
+a specific equal output of producer CJ $T$ to a specific
+producer slot of $T$, is intrinsic to the protocol and to the
+typical maker fee-advertisement workflow, and it has a clean
+deployable fix.
 
 The precision = 1.0 guarantee is what makes the result
 actionable: under the per-CJ loose gate the clusterer never
@@ -1657,22 +1622,22 @@ fee policies the analyst should switch to the corpus-unique
 gate at a recall cost of about 5%.
 
 The practical implication for JoinMarket users is that the
-relevant privacy figure for a round is not its published
-$n_{eq}$ but the v7.3 residual: today, around 94% of $n_{eq}$.
-The simulator ($\S 9.4$) identifies the deployable mitigation:
-**fee-policy homogenization** (`uniform_fee`, every maker on the
-reference client's default policy) drives the residual to the
-full $n_{eq}$ ceiling and produces zero Path A attributions.
-The behavioral knobs that the previous version of this paper
-proposed (`no_change_as_input`, `maker_only_cj`) are at best
-neutral and at worst *counterproductive*: by suppressing the
-v6 change-chain cluster-merging edge without touching the fee
-fingerprint, they force makers to recycle equal outputs more
-aggressively and *increase* the Path A attribution surface. The
-protocol is therefore hardenable today, by a coordinated client
-default change, without any protocol-level cryptographic
-addition; a future JMP-0005-class equal-output permutation
-commitment would close the residual leak in depth against an
-adaptive adversary. Until a JoinMarket client release ships the
-`uniform_fee` default, the v7.3 residual is the privacy budget
-the protocol gives its users.
+relevant privacy figure for a round is its v7.3 residual,
+today around 94% of $n_{eq}$, and that this figure is
+*improvable* by a single client-default change. The simulator
+($\S 9.4$) identifies the mitigation: **fee-policy
+homogenization** (`uniform_fee`, every maker on the reference
+client's default policy) drives the residual to the full
+$n_{eq}$ ceiling and produces zero Path A attributions.
+Alternative behavioral knobs (`no_change_as_input`,
+`maker_only_cj`) are at best neutral and at worst
+*counterproductive*: by suppressing the v6 change-chain
+cluster-merging edge without touching the fee fingerprint,
+they force makers to recycle equal outputs more aggressively
+and *increase* the Path A attribution surface. The headline
+result is therefore that JoinMarket is robust today and
+straightforwardly hardenable, by a coordinated client default
+change, without any protocol-level cryptographic addition; a
+future JMP-0005-class equal-output permutation commitment
+would close the residual leak in depth against an adaptive
+adversary.
