@@ -114,6 +114,16 @@ class V73Stats:
 class ClusterV73Result:
     labels: dict[int, int]
     attribution: AttributionStats
+    # Per-outpoint v7 fee-fingerprint attributions: maps a producer CJ's
+    # equal-output outpoint to the producer slot id that the within-CJ
+    # fingerprint uniquely identifies. This is the ONLY channel through
+    # which the on-chain analyst can bind a specific equal output to a
+    # specific maker; the change-chain and v7.1/v7.2/v7.3 edges link
+    # *slots* across CJs but cannot label equal outputs because the ILP
+    # of section 5 cannot tell two equal outputs of the same CJ apart.
+    # Anonymity-set reducers therefore certify an equal output only
+    # when it appears as a key in ``attribution_edges``.
+    attribution_edges: dict[str, int]
     v71: V71Stats
     v72: V72Stats
     v73: V73Stats
@@ -163,9 +173,12 @@ def cluster_v73(  # noqa: PLR0912, PLR0915
 
     # v7 attribution.
     attribution = AttributionStats()
+    attribution_edges: dict[str, int] = {}
     if equal_outpoints_by_tx:
-        edges, attribution = attribute_equal_outputs(slots, equal_outpoints_by_tx)
-        for outpoint, producer_slot_id in edges.items():
+        attribution_edges, attribution = attribute_equal_outputs(
+            slots, equal_outpoints_by_tx,
+        )
+        for outpoint, producer_slot_id in attribution_edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
                 if consumer_id == producer_slot_id:
                     continue
@@ -366,6 +379,7 @@ def cluster_v73(  # noqa: PLR0912, PLR0915
     return ClusterV73Result(
         labels=labels,
         attribution=attribution,
+        attribution_edges=attribution_edges,
         v71=v71,
         v72=v72,
         v73=v73,
