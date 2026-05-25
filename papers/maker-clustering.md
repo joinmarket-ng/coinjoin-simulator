@@ -170,32 +170,25 @@ Three protocol facts are load-bearing for the clusterer:
    one slot in the producer CJ would have charged this fee at the
    producer CJ's amount, we have identified that slot.
 
-Two more JoinMarket details matter for the analysis pipeline but
-not for the clusterer itself:
+Two more JoinMarket details matter for the analysis pipeline:
 
 - A maker offer is *either* relative or absolute, not both
-  (`cjfee_r` or `cjfee_a`, the field name picks the kind). Most
-  makers run a single relative offer.
+  (`cjfee_r` or `cjfee_a`). Most makers run a single relative
+  offer.
 - The maker's contribution to the on-chain fee (`txfee`) is 0
-  sats in the default policy and in practice is 0 across the
-  observed corpus.
+  sats in the default policy and across the observed corpus.
 
-The clusterer uses fact 1 as a hard pairwise must-not-link, fact
-2 as a definite same-wallet must-link, and fact 3 (via the
-fee-fingerprint rule of [§5.2](#v7-fee-fingerprint-equal-output-attribution)) as a per-CJ disambiguator that
-sometimes turns the producer-to-consumer equal-output reuse into
-a definite must-link.
-Fees are therefore *used* by the clusterer, but only in a
-precision-preserving way: we accept a fee match as evidence only
-when it picks a single producer slot inside a single producer CJ,
-never as a global fee-band that pools several CJs. Fidelity-bond
-values, nick patterns, and any other off-chain signal are not
-used (with the explicit exception of [§5.5](#v7-3-fidelity-bond-funding-tx-cioh), which uses the
-public orderbook to anchor FB-owner identity to funding-tx
-inputs). The intentional restriction to protocol-forced or
-single-CJ-unambiguous evidence is what gives precision = 1.0 by
-construction (under the gate and corpus stated in [§5.2](#v7-fee-fingerprint-equal-output-attribution) and [§6.1](#simulator-end-to-end-and-the-v7-gate-hierarchy);
-loosening either is the failure mode discussed in [§6.1](#simulator-end-to-end-and-the-v7-gate-hierarchy)).
+The clusterer uses fact 1 as a pairwise must-not-link, fact 2
+as a same-wallet must-link, and fact 3 (via the fee-fingerprint
+rule of [§5.2](#v7-fee-fingerprint-equal-output-attribution)) as a per-CJ disambiguator. Fees are used
+only when they pick a single producer slot inside a single
+producer CJ, never as a global fee-band. Fidelity-bond values,
+nick patterns and any other off-chain signal are not used
+(except [§5.5](#v7-3-fidelity-bond-funding-tx-cioh), which uses the public orderbook to anchor
+FB-owner identity to funding-tx inputs). This restriction to
+protocol-forced or single-CJ-unambiguous evidence is what gives
+precision = 1.0 by construction under the gate and corpus
+stated in [§5.2](#v7-fee-fingerprint-equal-output-attribution) and [§6.1](#simulator-end-to-end-and-the-v7-gate-hierarchy).
 
 ### 3.1 Worked example
 
@@ -736,72 +729,40 @@ operationally but disagrees with the per-role labelling under
 the ARI metric. Cluster-level precision remains 1.000 because
 no two distinct wallets share a cluster.
 
-Three findings deserve emphasis.
+Three findings.
 
-First, in the **uniform regime** the v7 fee-fingerprint gate
-never fires: every maker advertises the same offer, so the
-within-$T$ fingerprint set is constant and no $S_i$ is unique.
-v7 collapses to v6, and v6's chain backbone alone is sufficient
-to recover identity perfectly because the simulator preserves
-chain labels. This is a counterfactual on the fee-policy axis,
-not a recall failure of v7: when fees are uniform, the equal-
-chain attribution is uninformative by construction, and the
-clusterer correctly abstains.
+In the **uniform regime** v7 never fires (every maker
+advertises the same offer, so no within-$T$ $S_i$ is unique).
+v7 collapses to v6, and v6's chain backbone recovers identity
+perfectly because the simulator preserves chain labels. This is
+a counterfactual: when fees are uniform the equal-chain
+attribution is uninformative by construction, and the clusterer
+correctly abstains.
 
-Second, in the **varied regime under the per-CJ loose gate** the
-blinded clusterer produces 136 precision-violating clusters out
-of 4,620 (2.9%). The violations are all driven by the same
-mechanism: per-announcement fee jitter occasionally makes a
-maker's realized fingerprint in producer CJ $T$ coincide
-*numerically* with a different maker's policy, while the true
-producer of the consumed equal output has drifted off the
-consumer's fingerprint. The per-CJ univocal test selects the
-wrong $S_i$ because the right $S_i$ is no longer the unique
-match. The strict gate reduces violations from 136 to 98 (a 28%
-reduction) by demanding that both interpretations agree on the
-same slot, but cannot eliminate them: jitter occasionally aligns
-both abs and rel on the wrong slot.
+In the **varied regime under the loose gate** the blinded
+clusterer produces 136 precision-violating clusters out of 4,620
+(2.9%), all driven by per-announcement fee jitter aligning a
+maker's realized fingerprint in producer CJ $T$ with a different
+maker's policy. The strict gate (both interpretations agree)
+reduces violations to 98 but cannot eliminate them.
 
-Third, the **corpus-unique gate eliminates precision violations
-entirely**, at a recall cost of ~5% (ARI 0.449 to 0.323, recall
-proxy 0.956 to 0.912). The mechanism is direct: under jitter, a
-falsely chosen $S_i$ shares its fingerprint with at least one
-other slot somewhere else in the corpus (the true producer, or
-yet another jitter-aligned maker). The corpus-wide doppelganger
-check intercepts exactly these cases. In the torture regime the
-corpus-unique gate produces no edges at all because in the
-absence of chain-edge backbone every fingerprint has many
-candidate doppelgangers; this is the desired behavior for an
-adversarial setting in which fees alone do not carry attribution
-signal.
+The **corpus-unique gate eliminates precision violations
+entirely** at a 5% recall cost (ARI 0.449 to 0.323): under jitter,
+a falsely chosen $S_i$ shares its fingerprint with at least one
+other slot in the corpus, and the doppelganger check intercepts
+exactly these cases. In the torture regime the corpus-unique
+gate produces no edges at all, which is the desired behavior
+when fees alone carry no attribution signal.
 
-The simulator therefore separates two questions that mainnet
-data cannot: (a) is the per-CJ univocal test sound? and (b) does
-the corpus carry enough fingerprint diversity for soundness to
-matter? Under sparse, real-world fee distributions both gates
-report no violations (the corpus-unique gate adds zero corrections
-on mainnet, see §6.2 cross-nick checks at 0 collisions for
-the loose gate); under controlled jitter the per-CJ gate breaks
-while the corpus-unique gate holds. The headline mainnet numbers
-elsewhere in this paper use the loose gate, which is the right
-choice when the empirical violation rate is 0 and recall is
-worth ~5% per gate step; an adversarial-jitter setting should
-prefer the corpus-unique gate.
-
-For completeness we re-ran the gate hierarchy on the mainnet
-corpus (110,154 maker slots from 14,639 ILP-decoded CJs). All
-four gates (loose, strict, corpus-unique, and strict +
-corpus-unique) produce zero same-CJ violations and zero
-cross-nick violations on the probe set, and the probe-validator
-outcome is identical: 35 matched nicks, 40 matched UTXOs, 0
-cross-nick collisions, 4 nicks split across 2+ clusters with a
-maximum of 3 clusters per nick. Moving from loose to
-corpus-unique shrinks the largest cluster modestly and adds a
-small fraction of cluster splits, all of them outside the
-probed nick set. We keep the loose gate as
-the headline default for the rest of the paper but note that on
-this corpus the choice does not affect the probe-validated
-precision result.
+The simulator therefore separates (a) is the per-CJ test sound?
+from (b) does the corpus carry enough fingerprint diversity for
+soundness to matter? Under real-world fee distributions both
+gates report zero violations; under controlled jitter the per-CJ
+gate breaks while the corpus-unique gate holds. Mainnet headline
+numbers use the loose gate because the empirical violation rate
+is zero (cross-nick collisions = 0 across all four gates on the
+probe set; see [§6.2](#active-probing-of-real-maker-wallets)) and the recall delta is non-trivial;
+an adversarial-jitter setting should prefer corpus-unique.
 
 ### 6.2 Active probing of real maker wallets
 
@@ -945,34 +906,29 @@ the share of certified-maker CJs from 1.4% to 51.5%. The v7.3
 column is identical to v7 to three decimal places on this
 corpus.
 
-The reduction is bounded: the fee fingerprint univocally
-identifies 7,474 of the 32,801 cross-CJ equal-output reuses in
-the window (22.8%). The change-chain alone clusters maker slots
-extensively but those clusters cannot, on their own, identify
-which equal output came from which slot. The residual drops from
-7.61 to 6.86 on average (a 9.8% reduction), 51.5% of CJs leak at
-least one maker, and 23 CJs (0.22%) collapse fully to the taker.
+The fee fingerprint univocally identifies 7,474 of the 32,801
+cross-CJ equal-output reuses in the window (22.8%). The
+change-chain clusters maker slots extensively but cannot, on
+its own, identify which equal output came from which slot. The
+residual drops from 7.61 to 6.86 on average (a 9.8% reduction),
+51.5% of CJs leak at least one maker, and 23 CJs (0.22%)
+collapse fully to the taker.
 
 ![residual anonymity set histogram (v7.3, 1y window)](figures/anonset_reduction_hist.svg)
 
-The overlay across all five iterations makes the per-iteration
-contribution visible:
+The per-iteration overlay:
 
 ![v6 through v7.3 anonset overlay](figures/v6_vs_v7_anonset_overlay.svg)
 
-Under the corrected residual metric (Path A plus univocal Path B),
-the bulk of the reduction comes from the v6 -> v7 step, where the
-fee-fingerprint attribution edges (Path A) become available: mean
-residual drops from 7.60 (v6, Path B only via cluster co-spend) to
-6.86 (v7). The later iterations v7.1, v7.2 and v7.3 add cross-CJ
-cluster edges via CIOH, round-trip hops and fidelity-bond funding
-respectively; each adds a small number of additional univocal
-Path B certifications, but the mean residual moves by less than
-0.001 because most newly
-clustered maker slots are not paired with a same-cluster change
-anchor at a downstream consumer CJ. The taker-facing implication
-is that the fee fingerprint, not the cluster graph, drives most
-of the anonymity-set reduction.
+The bulk of the reduction comes from the v6 to v7 step, where
+fee-fingerprint attribution (Path A) becomes available. The
+later iterations v7.1, v7.2 and v7.3 each add a small number of
+Path B certifications via CIOH, round-trip hops and FB-funding
+edges, but the mean residual moves by less than 0.001 because
+most newly clustered maker slots are not paired with a
+same-cluster change anchor at a downstream consumer CJ. The
+fee fingerprint, not the cluster graph, drives most of the
+reduction.
 
 ### 7.2 Per-$n_{eq}$ breakdown
 
