@@ -259,15 +259,24 @@ from $B$: those values are distinct, so an observer who sees
 fee 1,500 sats in $S$ for a slot whose first input is one of
 $T$'s equal outputs concludes the producer slot was $A$.
 
-In practice JoinMarket makers randomize their advertised fee
-slightly ($\pm 10\%$ by default in the reference client) to
-avoid trivial cross-round fingerprinting; the example omits
-this jitter for clarity. The jitter narrows but does not
-eliminate the unique-match condition: on the mainnet fee grid
-most $(\mathit{cjfee}_r, \mathit{cjfee}_a)$ policies are still
-distinguishable within a CJ even under $\pm 10\%$, which is
-what makes the [§5.2](#v7-fee-fingerprint-equal-output-attribution) attribution gate fire on 22.8% of
-cross-CJ equal-output reuses.
+In practice JoinMarket's `yg-privacyenhanced` maker script applies
+a per-announcement multiplicative jitter to the advertised fee
+(default $\pm 10\%$); the base `yg-basic` does not, and
+re-randomization fires only when the maker re-publishes its offer,
+so it is not guaranteed between two consecutive CJs by the same
+maker. The example above omits this jitter for clarity. The jitter
+narrows but does not eliminate the unique-match condition: on the
+mainnet fee grid most $(\mathit{cjfee}_r, \mathit{cjfee}_a)$
+policies are still distinguishable within a CJ even under
+$\pm 10\%$, which is what makes the [§5.2](#v7-fee-fingerprint-equal-output-attribution)
+attribution gate fire on 22.8% of cross-CJ equal-output reuses.
+[Appendix B](#appendix-b-is-the-existing-fee-randomization-enough)
+evaluates the $\pm 10\%$ defense in detail: in the realistic
+threat scenario where the analyst picks a maker out of the
+$N = 10$ slots of the consumer CJ, the default jitter brings
+unique attribution down to $12.6\%$ (vs. uniform-guess baseline
+$10\%$), and defeating the fingerprint requires jitter close to
+the operational ceiling $f \to 1$.
 
 ## 4. Mainnet corpus
 
@@ -821,7 +830,14 @@ gate breaks while the corpus-unique gate holds. Mainnet headline
 numbers use the loose gate because the empirical violation rate
 is zero (cross-nick collisions = 0 across all four gates on the
 probe set; see [§6.2](#active-probing-of-real-maker-wallets)) and the recall delta is non-trivial;
-an adversarial-jitter setting should prefer corpus-unique.
+an adversarial-jitter setting should prefer corpus-unique. On the
+real 1y corpus, the corpus-unique gate functions only as a
+precision filter on top of the loose gate, not as a standalone
+matcher: applied alone it yields zero edges because the corpus
+contains enough fingerprint doppelgangers that no slot is
+globally unique. [Appendix A](#appendix-a-tolerant-fee-fingerprint-matching)
+characterizes this and the effect of relaxing exact match to a
+tolerance band.
 
 ### 6.2 Active probing of real maker wallets
 
@@ -1393,10 +1409,14 @@ dependent: the scaled simulator ([§6.1](#simulator-end-to-end-and-the-v7-gate-h
 adversarial fee jitter the per-CJ gate breaks at $\sim 3\%$ of
 edges and only the corpus-unique gate restores precision = 1.0
 by construction. On the present mainnet snapshot the gates are
-empirically indistinguishable; on a future snapshot in which an
-adversary deliberately concentrates many makers near similar
-fee policies the analyst should switch to the corpus-unique
-gate at a recall cost of about 5%.
+empirically indistinguishable on per-CJ violations; the
+corpus-unique gate, however, returns zero edges on the 1y
+mainnet corpus ([Appendix A](#appendix-a-tolerant-fee-fingerprint-matching)) because real fingerprint
+diversity is not high enough for any slot to be globally
+unique, so it is usable in practice only as a precision
+filter layered on the loose gate (or in the controlled
+simulator setting of [§6.1](#simulator-end-to-end-and-the-v7-gate-hierarchy), where its recall cost is about
+5%), not as a standalone matcher on real data.
 
 The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is its v7.3 residual,
@@ -1429,3 +1449,121 @@ result is therefore that JoinMarket is robust today and
 hardenable by a coordinated client-default change that
 homogenizes maker fee policies, with no protocol-level
 cryptographic addition required.
+
+## Appendix A. Tolerant fee-fingerprint matching
+
+The v7 attribution gate ([§5.2](#v7-fee-fingerprint-equal-output-attribution))
+requires byte-exact integer equality on each fingerprint. The
+reference clientserver supports a per-announcement multiplicative
+jitter on the advertised fee (`cjfee_factor`, default $\pm 10\%$):
+this code path is only active in `yg-privacyenhanced` (the base
+`yg-basic` class explicitly ignores the randomizing entries),
+and re-randomization only fires when the maker re-publishes its
+offer, which is itself triggered by an unrelated event (balance
+shift, manual restart, schedule). The newer `jm-ng` enables jitter
+by default, but it is recent and our 1y corpus is dominated by
+clientserver-era CoinJoins. A tolerance band of half-width $\pm t$
+on the analyst side could in principle recover the same-maker
+matches that exact equality misses when re-randomization does
+fire between two rounds. We added an opt-in `tolerance` parameter
+that lifts both the per-CJ univocality check and the
+corpus-uniqueness check onto a band-induced match set
+($\max(a, b)(1 - t) \le \min(a, b)(1 + t)$, equivalently
+ratio $\le (1 + t) / (1 - t)$). Default remains $t = 0$.
+
+![Attribution rate vs tolerance band on the 1y mainnet corpus.](figures/tolerance_sweep_1y.svg)
+
+Three findings on the 1y corpus (47,097 maker slots; 16,136
+cross-CJ reuse attempts). First, the loose-gate edge count peaks
+at $t = 0.05$ ($33\%$ of cross-CJ reuses, vs. $24\%$ at $t = 0$)
+and then declines: wider bands recover jittered same-maker matches
+but induce more per-CJ ambiguity, and the second effect dominates
+past $t = 0.05$. Second, the strict gate (both fingerprints
+univocal on the same producer slot) gains a $\sim 5\times$ recall
+lift from tolerance, from $1.4\%$ at $t = 0$ to $\sim 6.7\%$ at
+$t \in [0.15, 0.20]$ (the chart shows the curve flattening over
+this interval). Third, the corpus-unique gate returns zero edges
+at any tolerance: the corpus contains enough fingerprint
+doppelgangers that no slot is globally unique, so corpus-unique
+functions only as a precision filter layered on the loose gate,
+not as a standalone matcher.
+
+The default $t = 0$ is the right operating point for the loose
+gate. A practitioner trading a small precision margin for recall
+should use *strict + tolerance* at the chart's strict-gate plateau
+($t \in [0.15, 0.20]$, where the strict edge count peaks at
+$\sim 1{,}080$ edges before the per-CJ ambiguity starts pulling
+the curve down).
+
+## Appendix B. Is the existing fee randomization enough?
+
+The relevant threat is not "can the analyst place a maker among
+all orderbook offers?" but "can the analyst, knowing the maker's
+realized fee in producer CJ $T$, pick the maker's slot out of the
+$N$ slots of the consumer CJ $S$ where one of $T$'s equal outputs
+is spent next?". The competitive set in $S$ has size $N$, not
+$|\text{orderbook}|$: the other $N - 1$ slots of $S$ are random
+draws from the orderbook, and only those few draws ever compete
+with the target. This appendix simulates that matchup directly.
+
+Setup. CJ amounts are drawn from the empirical 1y eq-output
+distribution. The $N = 10$ slots of $S$ are sampled from the live
+orderbook (65 bonded relative offers, 41 distinct policies) with
+replacement; we report both bond-weighted sampling (clientserver
+defaults; realistic) and uniform sampling (counterfactual). The
+analyst observes the target's realized fee $y_T$ in producer CJ
+$T$. Each realized fee is $y = x \cdot j$ with $j$ uniform in
+$[1 - f, 1 + f]$, so given $y$ the maker's base policy lies in
+$\bigl[y / (1 + f), y / (1 - f)\bigr]$; two realized fees of one
+maker therefore differ by at most a factor $(1 + f) / (1 - f)$.
+The analyst's band $t$ accepts a candidate fee $y_S$ in $S$ when
+$\max(y_T, y_S) \cdot (1 - t) \le \min(y_T, y_S) \cdot (1 + t)$,
+which is equivalent to $\max / \min \le (1 + t) / (1 - t)$.
+Setting $t = f$ produces the tightest band that always covers the
+target. The reported quantity is $\Pr[\text{unique target in } S]$:
+no other slot of $S$ has a realized rel-ppm fingerprint inside the
+band around $y_T$.
+
+![Probability of unique attribution in a consumer CJ of N = 10 slots, vs maker jitter.](figures/fee_randomization_anon_set.svg)
+
+At $f = 0$ the target is uniquely identified in $39\%$ of CJs
+under bond-weighted sampling and $74\%$ under uniform sampling.
+The gap is the entire story: $94.5\%$ of the bond weight is
+concentrated in 10 makers, and 5 of those 10 advertise policies
+near $0.4\%$ within a $1.22\times$ ratio. The bond-weighted draw
+therefore frequently picks several slots with effectively the
+same policy, and the analyst cannot disambiguate them even
+without any randomization. This is the *quantization*
+homogenization effect: clustering of high-bond makers around a
+small set of fee levels collapses many distinguishable
+fingerprints to a few indistinguishable ones, which is exactly
+the positive structural property that fee-policy homogenization
+would extend to the whole orderbook.
+
+At the reference-client default $f = 0.10$ unique attribution
+drops to $12.6\%$ under bond-weighted sampling (vs. uniform-guess
+baseline $1/N = 10\%$); the analyst's expected candidate set in
+$S$ is $5.7$ slots out of $10$, meaning the band fails to exclude
+$4.7$ of the $9$ non-target slots on average. Under uniform
+sampling the same jitter still yields $35\%$ unique attribution,
+which confirms that the headline weakness is not the jitter
+itself but the existing fee clustering at the top of the bond
+distribution.
+
+Bringing each scenario below uniform-guess requires
+$f \ge 0.25$ in the bond-weighted case and $f \ge 0.40$ in the
+uniform case. Reducing unique attribution to $\sim 0.4\%$
+requires $f \ge 1.0$ in both, at which point the lower edge of
+the jitter window touches zero (operational ceiling).
+
+The structural property that already weakens the fingerprint is
+fee clustering across high-bond makers; the $\pm 10\%$ jitter
+rides on top of that effect rather than providing it. Extending
+the same clustering to *all* makers, by homogenizing fee policy,
+makes every band contain the full orderbook and removes the
+fingerprint as a deanonymization primitive. Fee randomization
+alone is not sufficient: the values that do defeat the
+fingerprint are near the construction's operational ceiling.
+
+
+
