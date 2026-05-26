@@ -490,8 +490,10 @@ violation rate is 0 (§6.2), but they cannot guarantee it
 under adversarial jitter where many makers concentrate near the
 same fee policy.
 
-Empirically on the mainnet corpus (32,430 cross-CJ equal-output
-reuses) under the per-CJ loose gate:
+Empirically on the full mainnet crawl (32,430 cross-CJ
+equal-output reuses across 14,639 ILP-decoded CJs; the 1y
+window subset reported in [§7](#anonymity-set-reduction) is slightly different at 32,801
+reuses and 7,474 unique attributions) under the per-CJ loose gate:
 
 | disposition                       |   count  | share  |
 |-----------------------------------|---------:|-------:|
@@ -505,13 +507,13 @@ reuses) under the per-CJ loose gate:
 
 ![v7 attribution breakdown](figures/v7_attribution_breakdown.svg)
 
-The 85% no-match share is dominated by reuses where the producer
-CJ is not in the corpus (the equal output's parent CJ was crawled
-but not ILP-decoded, or was outside the JM crawl). The 65
-conflict cases (0.1%) are *dropped* on purpose: they typically
-arise when one slot's absolute fee happens to numerically match
-another slot's relative fee at a different equal-output amount.
-The drop is the precision-preserving move.
+The 68.6% no-match share is dominated by reuses where the
+producer CJ is not in the corpus (the equal output's parent CJ
+was crawled but not ILP-decoded, or was outside the JM crawl).
+The 113 conflict cases (0.3%) are *dropped* on purpose: they
+typically arise when one slot's absolute fee happens to
+numerically match another slot's relative fee at a different
+equal-output amount. The drop is the precision-preserving move.
 
 The contract is identical to v6's: every added edge is a definite
 same-wallet link or no edge at all. v7 inherits v6's same-CJ
@@ -1018,7 +1020,7 @@ equal output is the one being spent).
 In the 1y corpus, this concrete role-change exposure (the
 forward equal output of $T$ is in a downstream Path A
 attribution) accounts for at most a few hundred CJs and is a
-strict subset of the 2,996 Path A attribution edges of [§7](#anonymity-set-reduction).
+strict subset of the 7,474 Path A attribution edges of [§7](#anonymity-set-reduction).
 We mention this for completeness; the [§7](#anonymity-set-reduction) anonymity-set
 reduction is the structurally stronger attack in this paper.
 The role-change exposure depends on the additional event of a
@@ -1038,7 +1040,7 @@ equal outputs of $T$ belongs to which slot. Closing Path A
 closes the user-facing [§7](#anonymity-set-reduction) residual reduction. The
 change-chain matters only insofar as Path B of [§7](#anonymity-set-reduction) uses
 cluster co-spend to confirm a small number of additional
-attributions ($295$ of the $3{,}206$ certified slots in the 1y
+attributions ($609$ of the $8{,}083$ certified slots in the 1y
 corpus).
 
 The deployable countermeasure is therefore
@@ -1070,8 +1072,8 @@ anonymity set (smaller is better for the attacker):
    that spends a producer-CJ equal output of $T$ alongside a
    change output of another slot in the same v7.3 cluster
    confirms, by co-spend, that the equal output came from a
-   slot in that cluster. Path B contributes only $295$
-   additional certifications on top of Path A's $2{,}996$ in
+   slot in that cluster. Path B contributes only $609$
+   additional certifications on top of Path A's $7{,}474$ in
    the 1y corpus.
 3. **Change reuse (v6 chain edge).** A maker's change UTXO is
    spent as an input of a later CJ slot owned by the same
@@ -1093,8 +1095,8 @@ anonymity set (smaller is better for the attacker):
 
 The user-facing per-CJ residual anonymity set ([§7](#anonymity-set-reduction)) is
 sensitive to signal (1) above all else: Path A alone produces
-$2{,}996$ of the $3{,}206$ certifications in the 1y corpus
-(93.5%). Suppress signal (1) and the residual rises to
+$7{,}474$ of the $8{,}083$ certifications in the 1y corpus
+(92.5%). Suppress signal (1) and the residual rises to
 $n_{eq}$ minus the small Path B contribution; suppress signals
 (2)-(4) without (1) and the residual barely moves.
 
@@ -1186,13 +1188,17 @@ counts.](figures/countermeasure_effectiveness.svg)
 
 Four observations:
 
-1. **`uniform_fee` is the deployable defense.** It is the only
-   configuration that drives the residual to $n_{eq}$ on
+1. **`uniform_fee` is the only effective defense.** It is the
+   only configuration that drives the residual to $n_{eq}$ on
    every CJ, certifies no makers, and produces zero Path A
    attributions. Pairing it with `maker_only_cj` does not
    change the result (Path A is already shut). Pairing it
    with `no_change_as_input` reopens the attack (see
-   observation 3 below).
+   observation 3 below). The defense is effective only when
+   every maker on the network adopts it; a single taker who
+   homogenizes their own fee does not move the residual on
+   the CJs they participate in, because the other makers'
+   fingerprints still leak.
 2. **`no_change_as_input` is counterproductive.** Removing the
    v6 cluster-merging edge does *not* reduce Path A. Worse,
    the behavioral effect of "do not spend change as input"
@@ -1212,7 +1218,7 @@ Four observations:
    leak through `uniform_fee` is small in absolute terms but
    it interacts badly with `no_change_as_input`. The clean
    defense is `uniform_fee` alone.
-4. **Throughput is preserved in the deployable defense.**
+4. **Throughput is preserved under `uniform_fee`.**
    `uniform_fee` does not change the simulator's taker-CJ
    throughput (the synthetic `maker_only_cj` stream is not
    needed). The only configurations with throughput issues
