@@ -109,6 +109,10 @@ def cluster_v72(
     non_cj_hops: Iterable[NonCjHop] | None = None,
     max_spender_outputs: int = 2,
     max_hop_outputs: int = 2,
+    *,
+    strict: bool = False,
+    corpus_unique: bool = False,
+    tolerance: float = 0.0,
 ) -> ClusterV72Result:
     """Run the v7.2 clusterer.
 
@@ -148,7 +152,10 @@ def cluster_v72(
     # v7 attribution edges.
     attribution = AttributionStats()
     if equal_outpoints_by_tx:
-        edges, attribution = attribute_equal_outputs(slots, equal_outpoints_by_tx)
+        edges, attribution = attribute_equal_outputs(
+            slots, equal_outpoints_by_tx,
+            strict=strict, corpus_unique=corpus_unique, tolerance=tolerance,
+        )
         for outpoint, producer_slot_id in edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
                 if consumer_id == producer_slot_id:

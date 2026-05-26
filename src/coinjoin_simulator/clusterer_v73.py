@@ -138,6 +138,10 @@ def cluster_v73(  # noqa: PLR0912, PLR0915
     max_spender_outputs: int = 2,
     max_hop_outputs: int = 2,
     max_funding_outputs: int = 2,
+    *,
+    strict: bool = False,
+    corpus_unique: bool = False,
+    tolerance: float = 0.0,
 ) -> ClusterV73Result:
     """Run the v7.3 clusterer.
 
@@ -177,6 +181,7 @@ def cluster_v73(  # noqa: PLR0912, PLR0915
     if equal_outpoints_by_tx:
         attribution_edges, attribution = attribute_equal_outputs(
             slots, equal_outpoints_by_tx,
+            strict=strict, corpus_unique=corpus_unique, tolerance=tolerance,
         )
         for outpoint, producer_slot_id in attribution_edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):

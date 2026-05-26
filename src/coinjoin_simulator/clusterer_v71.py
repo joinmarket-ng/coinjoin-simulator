@@ -101,6 +101,10 @@ def cluster_v71(
     equal_outpoints_by_tx: Mapping[str, Iterable[str]] | None = None,
     non_cj_spenders: Iterable[NonCjSpender] | None = None,
     max_spender_outputs: int = 2,
+    *,
+    strict: bool = False,
+    corpus_unique: bool = False,
+    tolerance: float = 0.0,
 ) -> ClusterV71Result:
     """Run the v7.1 clusterer.
 
@@ -162,7 +166,10 @@ def cluster_v71(
     # v7 fee-fingerprint equal-output edges.
     attribution = AttributionStats()
     if equal_outpoints_by_tx:
-        edges, attribution = attribute_equal_outputs(slots, equal_outpoints_by_tx)
+        edges, attribution = attribute_equal_outputs(
+            slots, equal_outpoints_by_tx,
+            strict=strict, corpus_unique=corpus_unique, tolerance=tolerance,
+        )
         for outpoint, producer_slot_id in edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
                 if consumer_id == producer_slot_id:

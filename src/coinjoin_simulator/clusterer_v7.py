@@ -39,6 +39,36 @@ Ambiguous matches and no-match cases produce no edge.
 This module is independent of v6's source (v6 is frozen). It
 reimplements the same union-find pipeline plus the v7 attribution
 step.
+
+Tolerance
+---------
+The default matching mode is **exact**: ``abs_fp`` and ``rel_fp`` must
+be byte-equal between consumer and producer slot. Under exact matching
+a yieldgenerator that randomizes its advertised ``cjfee`` per round
+(``yg-privacyenhanced`` style, default ``+/- 10%``) would not produce
+matching fingerprints across two announcements, and the attribution
+gate would never fire for that maker.
+
+Setting ``tolerance > 0`` relaxes equality to a ratio band: two
+fingerprints ``f_c`` and ``f_p`` are considered a match iff there
+exists some underlying policy value ``m`` such that both fall within
+``m * (1 +/- tolerance)``. The largest spread compatible with this is
+``f_c = m*(1-t)`` and ``f_p = m*(1+t)``, which gives the membership
+condition
+
+    max(f_c, f_p) / min(f_c, f_p) <= (1 + t) / (1 - t).
+
+With ``t = 0.20`` (matching JoinMarket's default ``cjfee_factor =
+0.1`` applied independently to two announcements) the ratio test is
+``max/min <= 1.5``. The univocality and corpus-unique gates are
+applied to the **band** equivalents: a producer slot is univocally
+matched iff it is the unique slot in the producer CJ whose
+fingerprint lies inside the consumer's band; corpus-uniqueness
+similarly requires no other slot in the corpus to fall inside the
+producer's band.
+
+The exact-match path is the ``tolerance == 0`` special case and is
+preserved without change.
 """
 
 from __future__ import annotations
@@ -117,6 +147,27 @@ class MakerSlotV7:
 # ---------------------------------------------------------------------------
 
 
+def _band_match(a: int, b: int, tolerance: float) -> bool:
+    """Return True iff fingerprints ``a`` and ``b`` are compatible under
+    a +/- ``tolerance`` policy uncertainty.
+
+    With ``tolerance == 0`` this collapses to exact equality. Otherwise
+    the test is ``max(a, b) * (1 - t) <= min(a, b) * (1 + t)``, which is
+    equivalent to ``max/min <= (1+t)/(1-t)`` but avoids division.
+
+    Non-positive values are treated as a no-match (used for None rel_fp
+    on equal-amt-zero slots, which already short-circuit at the caller).
+    """
+    if a <= 0 or b <= 0:
+        return a == b
+    if tolerance == 0.0:
+        return a == b
+    if a < b:
+        a, b = b, a
+    # a >= b. The band test is: a * (1 - t) <= b * (1 + t).
+    return a * (1.0 - tolerance) <= b * (1.0 + tolerance)
+
+
 @dataclass(slots=True, frozen=True)
 class AttributionStats:
     """Diagnostic counters from :func:`attribute_equal_outputs`."""
@@ -137,6 +188,7 @@ def attribute_equal_outputs(
     *,
     strict: bool = False,
     corpus_unique: bool = False,
+    tolerance: float = 0.0,
 ) -> tuple[dict[str, int], AttributionStats]:
     """Attribute reused equal outputs to specific producer slots by fee match.
 
@@ -168,6 +220,18 @@ def attribute_equal_outputs(
         from different policies are statistically rare to coincide.
         Disabled by default to keep the per-CJ semantics from the
         original v7 paper.
+    tolerance:
+        Relative half-width of the policy-uncertainty band for
+        fingerprint matching. With ``tolerance == 0`` (default) the
+        matcher requires byte-exact equality of ``abs_fp`` and
+        ``rel_fp`` between consumer and producer. With ``tolerance ==
+        0.20`` (recommended for the standard yieldgenerator with
+        ``cjfee_factor = 0.10`` applied independently to two
+        announcements), two fingerprints ``a`` and ``b`` match iff
+        ``max(a,b) * (1 - tol) <= min(a,b) * (1 + tol)``. The
+        univocality and corpus-uniqueness gates are then applied to
+        the matching set induced by this band test, not to exact-equal
+        lookups.
 
     Returns
     -------
@@ -192,12 +256,22 @@ def attribute_equal_outputs(
 
     # Corpus-wide fingerprint indices: which slot ids share a given
     # (abs_fp,) or (rel_fp,) value. Only computed when needed.
+    # Under tolerance > 0 we also keep a flat list of (fp, slot_id) for
+    # range scans.
     corpus_abs: dict[int, list[int]] = defaultdict(list)
     corpus_rel: dict[int | None, list[int]] = defaultdict(list)
+    corpus_abs_flat: list[tuple[int, int]] = []
+    corpus_rel_flat: list[tuple[int, int]] = []
     if corpus_unique:
         for i, s in enumerate(slots):
-            corpus_abs[s.abs_fp()].append(i)
-            corpus_rel[s.rel_fp_ppm()].append(i)
+            sa = s.abs_fp()
+            sr = s.rel_fp_ppm()
+            corpus_abs[sa].append(i)
+            corpus_rel[sr].append(i)
+            if tolerance > 0.0:
+                corpus_abs_flat.append((sa, i))
+                if sr is not None:
+                    corpus_rel_flat.append((sr, i))
 
     edges: dict[str, int] = {}
     cross_cj = 0
@@ -238,11 +312,24 @@ def attribute_equal_outputs(
                 c = slots[cid]
                 c_abs = c.abs_fp()
                 c_rel = c.rel_fp_ppm()
-                abs_hits = [sid for (sid, sa, _sr) in prod_fps if sa == c_abs]
-                if c_rel is None:
-                    rel_hits = []
+                if tolerance == 0.0:
+                    abs_hits = [sid for (sid, sa, _sr) in prod_fps if sa == c_abs]
+                    if c_rel is None:
+                        rel_hits = []
+                    else:
+                        rel_hits = [sid for (sid, _sa, sr) in prod_fps if sr == c_rel]
                 else:
-                    rel_hits = [sid for (sid, _sa, sr) in prod_fps if sr == c_rel]
+                    abs_hits = [
+                        sid for (sid, sa, _sr) in prod_fps if _band_match(sa, c_abs, tolerance)
+                    ]
+                    if c_rel is None:
+                        rel_hits = []
+                    else:
+                        rel_hits = [
+                            sid
+                            for (sid, _sa, sr) in prod_fps
+                            if sr is not None and _band_match(sr, c_rel, tolerance)
+                        ]
                 abs_unique = len(abs_hits) == 1
                 rel_unique = len(rel_hits) == 1
                 chosen: int | None = None
@@ -279,14 +366,33 @@ def attribute_equal_outputs(
                         # words: there must be no doppelganger of the
                         # producer in any OTHER tx.
                         prod = slots[chosen]
-                        prod_abs_hits = [
-                            sid for sid in corpus_abs.get(prod.abs_fp(), [])
-                            if sid != cid and slots[sid].txid != ptxid
-                        ]
-                        prod_rel_hits = [
-                            sid for sid in corpus_rel.get(prod.rel_fp_ppm(), [])
-                            if sid != cid and slots[sid].txid != ptxid
-                        ]
+                        p_abs = prod.abs_fp()
+                        p_rel = prod.rel_fp_ppm()
+                        if tolerance == 0.0:
+                            prod_abs_hits = [
+                                sid for sid in corpus_abs.get(p_abs, [])
+                                if sid != cid and slots[sid].txid != ptxid
+                            ]
+                            prod_rel_hits = [
+                                sid for sid in corpus_rel.get(p_rel, [])
+                                if sid != cid and slots[sid].txid != ptxid
+                            ]
+                        else:
+                            prod_abs_hits = [
+                                sid for (sa, sid) in corpus_abs_flat
+                                if _band_match(sa, p_abs, tolerance)
+                                and sid != cid
+                                and slots[sid].txid != ptxid
+                            ]
+                            if p_rel is None:
+                                prod_rel_hits = []
+                            else:
+                                prod_rel_hits = [
+                                    sid for (sr, sid) in corpus_rel_flat
+                                    if _band_match(sr, p_rel, tolerance)
+                                    and sid != cid
+                                    and slots[sid].txid != ptxid
+                                ]
                         if prod_abs_hits or prod_rel_hits:
                             chosen = None
                     if chosen is not None:
@@ -339,6 +445,7 @@ def cluster_v7(
     *,
     strict: bool = False,
     corpus_unique: bool = False,
+    tolerance: float = 0.0,
 ) -> tuple[dict[int, int], AttributionStats]:
     """Run the v7 clusterer.
 
@@ -365,6 +472,10 @@ def cluster_v7(
     slots whose abs and rel fingerprints identify them uniquely across
     the entire corpus, not just within the producer CJ. See
     :func:`attribute_equal_outputs` for details.
+
+    ``tolerance > 0`` replaces the byte-exact fingerprint test with a
+    relative band test compatible with per-announcement fee jitter; see
+    :func:`attribute_equal_outputs` for the precise definition.
     """
     idx = _build_index_v7(slots)
     uf = _ConstrainedUnionFind()
@@ -395,7 +506,7 @@ def cluster_v7(
     if equal_outpoints_by_tx:
         edges, stats = attribute_equal_outputs(
             slots, equal_outpoints_by_tx, strict=strict,
-            corpus_unique=corpus_unique,
+            corpus_unique=corpus_unique, tolerance=tolerance,
         )
         for outpoint, producer_slot_id in edges.items():
             for consumer_id in idx.consumers_of_utxo.get(outpoint, ()):
