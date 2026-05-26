@@ -628,10 +628,11 @@ FB-funding tx (orderbook snapshot 2026-05-22, 95 FB UTXOs):
 | funded from JM-CJ outputs not classified as equal or change       |    10 |
 | **total**                                                         |    95 |
 
-Sixty-six of 95 FBs (69%) fund from inputs with no observable JM
-provenance: cold storage, exchange withdrawals, or fresh wallets.
-This is the privacy-preserving pattern. The 17 mixed funding txs
-are the ones that *do* leak a same-wallet edge at one hop and
+Sixty-six of 95 FBs (69%) fund from inputs with no observable
+JM provenance: cold storage, exchange withdrawals, or fresh
+wallets. The on-chain backward walk from the FB UTXO stops at
+the funding tx and finds no JM-linked input. The 17 mixed
+funding txs are the ones that *do* leak a same-wallet edge at one hop and
 contribute the backward anchors that v7.3 acts on. Multi-hop
 backward CIOH walks could shrink the 69% further and are listed
 in [§10](#limitations-and-future-work) as future work.
@@ -738,6 +739,13 @@ n_{\text{owners}}) / (n_{\text{slots}} - n_{\text{owners}}))$,
 and ARI is the standard adjusted Rand index against the
 simulator's ownership labels.
 
+Precision in the torture rows is trivially 1.000: every slot is
+its own singleton cluster, so no cluster can contain two
+distinct wallets. The metric is meaningful only when read
+alongside recall, which is 0 in those rows. The same caveat
+applies to any operating point that under-clusters into all
+singletons.
+
 The ground-truth row of the varied regime has ARI = 0.879 (not
 1.0) because the simulator's `wallet_id` labels distinguish a
 wallet's taker role from its maker role; when the same wallet
@@ -755,7 +763,40 @@ v7 collapses to v6, and v6's chain backbone recovers identity
 perfectly because the simulator preserves chain labels. This is
 a counterfactual: when fees are uniform the equal-chain
 attribution is uninformative by construction, and the clusterer
-correctly abstains.
+correctly abstains on the fee channel.
+
+Cluster anatomy in the uniform regime is the part that matters
+for would-be defenders. All 717 clusters are non-trivial: mean
+size is 139.5 slots, the size distribution is concentrated
+around 180-205 slots per cluster (top of the histogram: 13
+clusters of size 196, 12 of size 199, 12 of size 187, 11 each
+of size 80, 205, 185, 191), and there are no singletons.
+That is, even with the entire fee channel disabled, the
+v6 chain backbone alone reconstructs every simulator wallet
+end-to-end. Fee homogenization removes the v7 layer (and on
+mainnet that layer carries 51.5% additional anonset reduction;
+see [§7.1](#headline-results)) but leaves the underlying
+mixdepth-to-mixdepth equal-output chain fully traceable
+whenever a wallet keeps reusing the same depth-rotation pattern
+under the same set of nick advertisements. On the simulator,
+where chain labels are clean by construction, this gives a
+worst-case upper bound on what fee homogenization *cannot* fix:
+the operator-level identity that the chain backbone exposes.
+
+This bound is qualitatively important: fee homogenization is a
+necessary but not sufficient mitigation. To collapse the
+chain-backbone signal as well one would also need to break
+the deterministic relation between a maker's nick and its
+on-chain equal-output trail, e.g. by rotating wallets on a
+shorter cadence than the chain depth, by routing equal outputs
+through non-CJ hops before the next round, or by adopting a
+chaumian, single-coordinator round protocol where no maker
+ever publishes a nick at all. The countermeasure simulator
+in [§6.2](#countermeasure-simulator-evaluation) quantifies
+what `uniform_fee + no_change_as_input + maker_only_cj`
+recovers (anonset 1.50 to 4.32 effective, no Path B residue);
+the chain-backbone limit is the residual ceiling that no
+fee-side change can lift.
 
 In the **varied regime under the loose gate** the blinded
 clusterer produces 136 precision-violating clusters out of 4,620
