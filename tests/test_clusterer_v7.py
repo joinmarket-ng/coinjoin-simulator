@@ -360,3 +360,127 @@ def test_corpus_unique_keeps_globally_unique_match() -> None:
         slots, {"T": ["T:0"]}, strict=True, corpus_unique=True,
     )
     assert labels[1] == labels[3]
+
+
+# ---------------------------------------------------------------------------
+# Tolerance gate (per-announcement fee jitter)
+# ---------------------------------------------------------------------------
+
+
+def test_tolerance_zero_matches_exact_behavior() -> None:
+    # Two slots whose abs fee differs by 1 sat should still match
+    # under exact equality (tolerance=0.0) only if equal. Verify that
+    # the tolerance=0.0 path is byte-equivalent to the legacy code:
+    # the exact-equal slot is unioned, the off-by-one slot is not.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=101, eq_amt=10_000),  # off by 1
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=100, eq_amt=10_000),
+    ]
+    labels, _ = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.0)
+    # Tp-m0 fee=100 matches T-m0 (fee=100) uniquely on abs (rel ppm
+    # tie-broken via two equal candidates: T-m0 10_000 ppm and T-m1
+    # 10_100 ppm; the consumer rel=10_000 hits only T-m0).
+    assert labels[0] == labels[2]
+    # T-m1 not unioned.
+    assert labels[1] != labels[0]
+
+
+def test_tolerance_unions_under_jitter() -> None:
+    # Producer slot fee 100 sat (abs/rel = 100, 10000 ppm), consumer
+    # slot fee 110 sat at the same equal-amt (abs/rel = 110, 11000
+    # ppm). Ratio 1.10 < (1+0.2)/(1-0.2) = 1.5, so a 20% tolerance
+    # must union both fingerprints, while exact match must not.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=900, eq_amt=10_000),  # far away, won't match
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=110, eq_amt=10_000),
+    ]
+    # Exact match: must NOT union (fee 100 vs 110 differ, ppm 10000
+    # vs 11000 differ).
+    labels_exact, _ = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.0)
+    assert labels_exact[0] != labels_exact[2]
+    # Tolerant match: MUST union.
+    labels_tol, _ = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.2)
+    assert labels_tol[0] == labels_tol[2]
+
+
+def test_tolerance_respects_univocality() -> None:
+    # Two producer slots both fall inside the consumer's band:
+    # tolerance must NOT union (no univocal match).
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=110, eq_amt=10_000),  # also in band
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=105, eq_amt=10_000),
+    ]
+    labels, stats = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.2)
+    # Both T-m0 and T-m1 are within +/- 20% of 105, and their rel ppm
+    # values (10_000 and 11_000) also straddle the consumer's
+    # 10_500 ppm under +/- 20%. So neither abs nor rel is unique.
+    assert labels[0] != labels[2]
+    assert labels[1] != labels[2]
+    # Stats: ambiguous bucket should have ticked.
+    assert stats.ambiguous == 1
+
+
+def test_tolerance_out_of_band_no_match() -> None:
+    # Consumer is far outside the producer's +/- 20% band.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=900, eq_amt=10_000),
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=500, eq_amt=10_000),
+    ]
+    labels, stats = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.2)
+    assert labels[0] != labels[2]
+    assert labels[1] != labels[2]
+    assert stats.no_match == 1
+
+
+def test_tolerance_corpus_unique_band_scan() -> None:
+    # T-m0 has a doppelganger in U under +/- 20%, so corpus_unique
+    # must REJECT the union even though the per-CJ test passes.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=900, eq_amt=10_000),
+        _slot("U", "U-m0", fee=105, eq_amt=10_000),  # band-doppelganger
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=110, eq_amt=10_000),
+    ]
+    labels, _ = cluster_v7(
+        slots, {"T": ["T:0"]}, tolerance=0.2, corpus_unique=True,
+    )
+    assert labels[0] != labels[3]
+    # Without corpus_unique, the per-CJ band match still fires.
+    labels2, _ = cluster_v7(slots, {"T": ["T:0"]}, tolerance=0.2)
+    assert labels2[0] == labels2[3]
+
+
+def test_band_match_symmetry_and_ratio() -> None:
+    # Direct unit check on the helper.
+    from coinjoin_simulator.clusterer_v7 import _band_match
+
+    assert _band_match(100, 100, 0.0)
+    assert not _band_match(100, 101, 0.0)
+    # Boundary: with t=0.2, max/min = (1+0.2)/(1-0.2) = 1.5 exactly.
+    assert _band_match(150, 100, 0.2)
+    assert _band_match(100, 150, 0.2)  # symmetric
+    assert not _band_match(151, 100, 0.2)
+    # Zero or negative: only equal matches.
+    assert _band_match(0, 0, 0.5)
+    assert not _band_match(0, 1, 0.5)
+
+
+def test_attribute_equal_outputs_returns_band_match_edges() -> None:
+    # End-to-end check on the attribute function: verify the edge
+    # dict carries the band-matched producer slot id.
+    slots = [
+        _slot("T", "T-m0", fee=100, eq_amt=10_000),
+        _slot("T", "T-m1", fee=900, eq_amt=10_000),
+        _slot("Tp", "Tp-m0", inputs=("T:0",), fee=115, eq_amt=10_000),
+    ]
+    edges, stats = attribute_equal_outputs(
+        slots, {"T": ["T:0"]}, tolerance=0.2,
+    )
+    assert edges == {"T:0": 0}
+    assert stats.cross_cj_reuses == 1
+    assert isinstance(stats, AttributionStats)
+
