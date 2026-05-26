@@ -133,9 +133,10 @@ Three protocol facts are load-bearing for the clusterer:
 
 1. **Per-CJ slot uniqueness.** Each participant (taker or maker)
    contributes exactly one slot. A slot may aggregate several
-   UTXOs to cover the offered amount, but it always produces one
-   equal-amount output and at most one change output, all in the
-   same mixdepth.
+   UTXOs to cover the offered amount; all of its inputs come
+   from the same mixdepth $d$, but the slot's equal output and
+   change output land in *different* mixdepths (the equal
+   output in $d{+}1 \bmod 5$, the change in $d$).
 
 2. **Same-mixdepth change (sticky change).** A slot whose inputs
    come from mixdepth $d$ lands its change output back in
@@ -238,21 +239,35 @@ some future CJ where $A$ again advertises mixdepth 1; that future
 CJ is the chain edge that v6 walks. The same applies to $B$'s
 change in mixdepth 0.
 
-The equal outputs go to mixdepth 2 of their respective owners and
-become natural inputs for whichever participant next advertises
-from mixdepth 2 (the wallet's depth-rotation policy will usually
-prefer the fattest mixdepth, which after this CJ is often
-mixdepth 2 but not necessarily). When such a reuse happens in a
-later CJ $S$, the consumer slot's realized fee in $S$ identifies
-the producer slot in $T$ if and only if no other slot in $T$ would
-have charged the same fee at $S$'s amount: that is the
-fee-fingerprint rule of [§5.2](#v7-fee-fingerprint-equal-output-attribution) in concrete form. For example, if
-$A$ charges 0.1% relative and $B$ charges a fixed 800 sats, then
-on $S$ at amount $1{,}500{,}000$ the consumer slot's fee would be
-1,500 sats if it came from $A$ and 800 sats if it came from $B$:
-those values are distinct, so an observer who sees fee 1,500
-sats in $S$ for a slot whose first input is one of $T$'s equal
-outputs concludes the producer slot was $A$.
+The equal output of $A$ lands in $A$'s mixdepth 2 (since $A$'s
+inputs were drawn from mixdepth 1, and the equal output advances
+to $d{+}1$); the equal output of $B$ lands in $B$'s mixdepth 1
+(since $B$'s inputs were drawn from mixdepth 0). Each will
+become a natural input the next time its owner advertises from
+the receiving mixdepth (the wallet's depth-rotation policy
+usually prefers the fattest mixdepth, which after this CJ is
+often the one that just received the equal output but not
+necessarily). When such a reuse happens in a later CJ $S$, the
+consumer slot's realized fee in $S$ identifies the producer
+slot in $T$ if and only if no other slot in $T$ would have
+charged the same fee at $S$'s amount: that is the
+fee-fingerprint rule of [§5.2](#v7-fee-fingerprint-equal-output-attribution) in concrete form. For example,
+if $A$ charges 0.1% relative and $B$ charges a fixed 800 sats,
+then on $S$ at amount $1{,}500{,}000$ the consumer slot's fee
+would be 1,500 sats if it came from $A$ and 800 sats if it came
+from $B$: those values are distinct, so an observer who sees
+fee 1,500 sats in $S$ for a slot whose first input is one of
+$T$'s equal outputs concludes the producer slot was $A$.
+
+In practice JoinMarket makers randomize their advertised fee
+slightly ($\pm 10\%$ by default in the reference client) to
+avoid trivial cross-round fingerprinting; the example omits
+this jitter for clarity. The jitter narrows but does not
+eliminate the unique-match condition: on the mainnet fee grid
+most $(\mathit{cjfee}_r, \mathit{cjfee}_a)$ policies are still
+distinguishable within a CJ even under $\pm 10\%$, which is
+what makes the [§5.2](#v7-fee-fingerprint-equal-output-attribution) attribution gate fire on 22.8% of
+cross-CJ equal-output reuses.
 
 ## 4. Mainnet corpus
 
