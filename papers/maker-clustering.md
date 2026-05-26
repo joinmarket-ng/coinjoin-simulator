@@ -16,7 +16,7 @@
 > The fix is not unilateral. A taker can choose to overpay so
 > that every maker in *their* round receives the same effective
 > fee, masking the within-round fingerprint, but the next
-> taker's round will still expose those same makers under
+> taker's round might still expose those same makers under
 > their actual offer fees, so the fingerprint signal is
 > reconstructed across rounds. Effective mitigation requires
 > every maker on the network to converge on a uniform
@@ -1170,12 +1170,6 @@ Several measures are sometimes suggested as countermeasures
 but do not, on their own, reduce the user-facing residual
 under our threat model:
 
-- *Relocate change to a different mixdepth* or *use a fresh
-  wallet derivation between rounds*. The analyst's chain edge
-  is keyed on UTXO identity, not on mixdepth or xpub branch.
-  None of the cluster-merging edges (v6, v7.1, v7.2, v7.3)
-  attribute equal outputs to slots either, so the [§7](#anonymity-set-reduction)
-  residual is unaffected.
 - *Batch-consolidate change UTXOs in a non-CJ tx* before the
   next round. Combining several change UTXOs into a single
   output before the next CJ collapses same-wallet UTXOs into
@@ -1194,14 +1188,35 @@ under our threat model:
 - *Use a JM-disjoint fidelity-bond wallet* (66 of 95 FBs in
   our snapshot already do). This closes the [§5.5](#v7-3-fidelity-bond-funding-tx-cioh)
   FB-funding edge against a passive analyst that does not
-  interact with the orderbook. Useful as a recall-tightening
-  hygiene measure, not as a residual-anonset countermeasure.
+  interact with the orderbook, but FBs are advertised on the
+  orderbook alongside the maker's fee policy, so the analyst
+  who reads the orderbook (everyone, in practice) still links
+  the FB UTXO to the maker's nick and therefore to every slot
+  Path A attributes to that nick. The FB-disjoint-wallet
+  mitigation only becomes practically useful in combination
+  with (a) anonymous FB advertisement (the FB UTXO is proved
+  to the coordinator but not bound to a public nick) and
+  (b) fee homogenization (so the nick itself carries no
+  attribution signal). Without both, FB-disjoint funding is a
+  recall-tightening hygiene measure, not a residual-anonset
+  countermeasure.
 - *Route non-CJ spends through batched
-  ($\geq 3$-output) transactions.* Closes the [§5.3](#v7-1-non-cj-co-spend-common-input-ownership-heuristic)-[§5.4](#v7-2-non-cj-round-trip-cioh)
-  CIOH channel but, as a cluster-merging signal, does not move
-  the residual.
-- *Run the maker over Tor only.* The whole attack runs on
-  the public chain.
+  ($\geq 3$-output) transactions.* Defeats the specific
+  CIOH heuristics implemented in [§5.3](#v7-1-non-cj-co-spend-common-input-ownership-heuristic)-[§5.4](#v7-2-non-cj-round-trip-cioh)
+  (which key on 2-output non-CJ shape), but the underlying
+  same-input-ownership inference is still on-chain: an analyst
+  who adapts the heuristic to wider fan-outs (e.g. by gating
+  on the joint distribution of output amounts and counterparty
+  reuse) recovers most of the lost edges. The measure raises
+  the analyst's per-edge cost; it does not eliminate the
+  channel.
+- *Run the maker over Tor only.* This is already standard
+  practice for JoinMarket clients (the reference distribution
+  ships with Tor-only defaults) and is the right network-level
+  hygiene. It does not affect the present results because the
+  entire attack is computed from public chain data; no
+  network-level mitigation (Tor, mixnet, dummy traffic) can
+  reduce a signal that is published in block N.
 
 ### 9.3 Countermeasure simulator evaluation
 
@@ -1308,9 +1323,12 @@ the table:
   mainnet. This is the recommended deployment.
 - **Protocol change.** A protocol-level fee-homogenization rule
   (every maker must advertise the reference policy, enforced by
-  the coordinator or by the orderbook) achieves the same Path A
-  shutdown as the client patch above without depending on
-  voluntary adoption.
+  takers refusing to select makers that deviate) achieves the
+  same Path A shutdown as the client patch above without
+  depending on voluntary adoption by makers. JoinMarket has no
+  coordinator and the orderbook is a passive broadcast medium,
+  so taker-side enforcement is the only enforcement point
+  available in the current protocol.
 
 Simulator caveats. The simulator does not model non-CJ maker
 spends, so the [§5.3](#v7-1-non-cj-co-spend-common-input-ownership-heuristic)-[§5.4](#v7-2-non-cj-round-trip-cioh) CIOH edges and the [§5.5](#v7-3-fidelity-bond-funding-tx-cioh)
@@ -1384,13 +1402,18 @@ The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is its v7.3 residual,
 today around 94% of $n_{eq}$, and that this figure is
 *improvable* by a network-wide client-default change. A
-unilateral fix is not available to a single taker: an
-individual taker can overpay so every maker in their round
-sees the same effective fee, but the makers' actual
-advertised offer policies still apply to *other* takers'
-rounds and the fingerprint is reconstructed across the
-corpus. The mitigation lives with the makers, not with any
-individual taker.
+unilateral fix is not available to a single taker. A taker
+can, in principle, overpay every maker in their round so all
+slots in that CJ receive the same effective fee (the taker
+sets the realized fees, subject to each maker's advertised
+minimum); within that single CJ the fee fingerprint is
+flattened. But the same makers also participate in other
+takers' rounds, where the actual advertised offer policies
+apply, and the fingerprint could be reconstructed across the corpus
+from those rounds. Mitigation has to live with the makers'
+*advertised* policies (so every taker's round inherits the
+homogenized fee), not with any individual taker's payment
+choice.
 The simulator
 ([§9.3](#countermeasure-simulator-evaluation)) identifies the mitigation: **fee-policy
 homogenization** (`uniform_fee`, every maker on the reference
