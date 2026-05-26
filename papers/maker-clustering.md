@@ -938,13 +938,12 @@ $k(T)$ is the **lower bound** on the true residual anonymity set.
 Across the 10,368 mainnet CJs analyzed in the 1y window (6,315
 fully ILP-decoded plus 4,053 with partial maker slots recovered
 from the analyzer's greedy preprocessing pass; see [§7.4](#partial-ilp-slot-recovery)).
-The v7.1, v7.2 and v7.3 increments add small numbers of
-cross-CJ cluster edges (60, 79 and 13 unions respectively) but
-do not move the mean residual at three decimal places: their
-contribution is qualitative (widening the wallet boundary on
-clusters that were already certified by v7), not quantitative.
-The headline table therefore collapses v7.1-v7.3 into a single
-column:
+The v7.1, v7.2 and v7.3 increments do add cross-CJ cluster
+edges (60, 79 and 13 unions respectively), but none of those
+edges convert into additional certified makers in the 1y
+window: the residual is identical at three decimal places
+across v7, v7.1, v7.2 and v7.3. The headline table therefore
+collapses v7.1-v7.3 into a single column:
 
 | metric                                          | v6 (change-chain only) | v7 (Path A) | v7.3 (final) |
 |-------------------------------------------------|-----------------------:|------------:|-------------:|
@@ -975,18 +974,17 @@ collapse fully to the taker.
 
 ![residual anonymity set histogram (v7.3, 1y window)](figures/anonset_reduction_hist.svg)
 
-The per-iteration overlay:
-
-![v6 through v7.3 anonset overlay](figures/v6_vs_v7_anonset_overlay.svg)
-
-The bulk of the reduction comes from the v6 to v7 step, where
-fee-fingerprint attribution (Path A) becomes available. The
-later iterations v7.1, v7.2 and v7.3 each add a small number of
-Path B certifications via CIOH, round-trip hops and FB-funding
-edges, but the mean residual moves by less than 0.001 because
-most newly clustered maker slots are not paired with a
-same-cluster change anchor at a downstream consumer CJ. The
-fee fingerprint, not the cluster graph, drives most of the
+The v7.x increments (Path B: CIOH, round-trip hops, FB-funding)
+add 152 cross-cluster unions in total but no measurable anonset
+movement. This is itself a finding: the change-chain backbone
+is structurally rich but operationally weak in the 1y window,
+and the practical strength of the attribution pipeline lies
+in the fee fingerprint of v7 Path A. The cluster graph
+contributes the *partition* (which slots belong to the same
+wallet) without which Path A would still attribute outputs but
+could not aggregate them across rounds; the fee fingerprint
+contributes the *attribution* (which output came from which
+slot) without which the partition would carry no anonset
 reduction.
 
 ### 7.2 Per-$n_{eq}$ breakdown
@@ -1028,10 +1026,12 @@ residuals) under the same threat model:
   CJs for which neither the ILP nor the greedy preprocessing can
   pin any maker, and some producer CJs are outside the window.
   Both effects under-report Path A attributions.
-- **Greater fee-policy diversity.** Counterintuitively, a wider
-  fee grid makes more producer slots uniquely fingerprintable;
-  the maker population that runs the reference client's default
-  policy is *less* attackable (their fingerprint collides with
+- **Greater fee-policy diversity.** A wider fee grid makes more
+  producer slots uniquely fingerprintable, because each policy
+  is shared by fewer makers and a realized fee value at a given
+  amount more often pins a single slot. The maker population
+  that runs the reference client's default policy is *less*
+  attackable on this dimension (their fingerprint collides with
   every other default-policy maker). The simulator results of
   [§9.3](#countermeasure-simulator-evaluation) quantify this.
 
@@ -1041,14 +1041,21 @@ residuals) under the same threat model:
 ILP solution at the chosen budget; the other 4,266 do not. The
 analyzer's greedy preprocessing pass
 (`joinmarket_analyzer.greedy.greedy_preprocessing`) makes
-deterministic forced assignments before the ILP is invoked
-(inputs with a unique participant-compatible amount match, and
-participants whose change output is uniquely identified by the
-fee arithmetic), which are sound whether or not the full ILP
-later converges. Running greedy alone on the 4,266 unresolved
-CJs recovers 21,621 partial maker slots from 4,219 of them
-(98.9%), with the same record schema as full-ILP slots plus a
-`partial=true` provenance flag.
+deterministic forced assignments before the ILP is invoked.
+For each unassigned input it checks whether the fee equation
+$\text{input} + \text{maker\_fee} = \text{equal} + \text{change}$
+admits exactly one compatible change output (under the
+maker's published policy and the global $\text{max\_fee\_rel}$
+and $\text{max\_fee\_abs}$ bounds), and whether that change is
+itself compatible with exactly one unassigned input. Such
+bidirectionally unique input-to-change pairs are locked in;
+the same check is applied to the taker no-change case
+(input = equal + network\_fee + sum of maker fees). These
+matches are sound whether or not the full ILP later converges.
+Running greedy alone on the 4,266 unresolved CJs recovers
+21,621 partial maker slots from 4,219 of them (98.9%), with
+the same record schema as full-ILP slots plus a `partial=true`
+provenance flag.
 
 The merged corpus (full + partial) yields the headline 7.61 to
 6.86 reduction. On the full-ILP-only subset, the corresponding
