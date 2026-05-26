@@ -13,14 +13,15 @@
 > when every maker runs the reference client's default policy,
 > the fingerprint stops disambiguating and the residual returns
 > to the $n_{eq}$ ceiling ([§9.3](#countermeasure-simulator-evaluation)).
-> The fix is not unilateral: a single taker who jitters their
-> own fee no longer leaks their own slot, but the CJs they
-> participate in still expose the *other* makers as long as
-> those makers run varied policies, and the taker's own slot
-> can often be re-identified by comparison with surrounding
-> rounds. Effective mitigation requires the whole network to
-> converge on a uniform default. The protocol is robust today
-> and improvable.
+> The fix is not unilateral. A taker can choose to overpay so
+> that every maker in *their* round receives the same effective
+> fee, masking the within-round fingerprint, but the next
+> taker's round will still expose those same makers under
+> their actual offer fees, so the fingerprint signal is
+> reconstructed across rounds. Effective mitigation requires
+> every maker on the network to converge on a uniform
+> advertised policy. The protocol is robust today and
+> improvable.
 
 ## 1. Scope and motivation
 
@@ -45,21 +46,20 @@ JoinMarket defends this set in several layered ways:
   $d{+}1 \bmod 5$ of the same wallet (the equal output is the
   part that gained privacy and gets to advance); the change
   output stays at mixdepth $d$ (its address derivation belongs to
-  the same mixdepth as the inputs, and JoinMarket clients refuse
-  to co-spend UTXOs across mixdepths). Outputs from different
-  mixdepths of the same wallet are therefore never co-spent
-  inside the wallet without an explicit consolidation step in
-  the client.
+  the same mixdepth as the inputs).
 - Each maker advertises offers on the JoinMarket directory-server
   overlay. Today the overlay is a small set of directory nodes
   that relay (often end-to-end encrypted) Tor messages between
   participants; earlier versions used IRC. Nicks are randomized
   per session, and offers can be advertised either with or
   without a fidelity bond. A *fidelity bond* (FB) is a timelocked
-  P2WSH UTXO the maker proves they control; bondless offers can
+  P2WSH UTXO the maker proves they control (see
+  [BIP-0046](https://github.com/bitcoin/bips/blob/master/bip-0046.mediawiki)); bondless offers can
   be advertised freely and are therefore trivially Sybil-able,
   so takers in practice almost always select bonded makers (the
-  taker selection algorithm weights by bond value). The FB is
+  taker selection algorithm weights by bond value, with an
+  optional bondless allowance percentage that picks uniformly
+  from all makers, bonded or not). The FB is
   the only durable label a passive observer sees, and the
   orderbook publishes it in cleartext.
 - The taker's identity at round $T$ does not, by itself, leak
@@ -577,8 +577,9 @@ v7.2 adds 103 unions on top of v7.1's 95.
 
 ### 5.5 v7.3: fidelity-bond funding-tx CIOH
 
-JoinMarket makers advertise a *fidelity bond* (FB): a timelocked
-P2WSH output that the maker proves they own. The orderbook
+JoinMarket makers advertise a *fidelity bond* (FB,
+[BIP-0046](https://github.com/bitcoin/bips/blob/master/bip-0046.mediawiki)):
+a timelocked P2WSH output that the maker proves they own. The orderbook
 publishes the nick-to-FB-UTXO mapping in cleartext, so any
 passive observer obtains a snapshot. The bond UTXO is timelocked
 and almost never spent in our corpus, but the transaction $F$
@@ -1195,10 +1196,11 @@ Four observations:
    change the result (Path A is already shut). Pairing it
    with `no_change_as_input` reopens the attack (see
    observation 3 below). The defense is effective only when
-   every maker on the network adopts it; a single taker who
-   homogenizes their own fee does not move the residual on
-   the CJs they participate in, because the other makers'
-   fingerprints still leak.
+   every maker on the network adopts it. A taker can overpay
+   to flatten the realized fees in their own round, but the
+   *next* taker's round exposes the same makers again under
+   their actual offer fees, so the fingerprint signal is
+   reconstructed across rounds.
 2. **`no_change_as_input` is counterproductive.** Removing the
    v6 cluster-merging edge does *not* reduce Path A. Worse,
    the behavioral effect of "do not spend change as input"
@@ -1319,12 +1321,13 @@ The practical implication for JoinMarket users is that the
 relevant privacy figure for a round is its v7.3 residual,
 today around 94% of $n_{eq}$, and that this figure is
 *improvable* by a network-wide client-default change. A
-unilateral fix by a single taker is insufficient: the taker
-can suppress their own fee fingerprint, but the *other* maker
-slots in the same CJ remain fingerprintable, so the bulk of
-the attack surface persists; in addition, a taker whose own
-slot is the only one with a homogenized fee is itself
-distinguishable by elimination across surrounding rounds.
+unilateral fix is not available to a single taker: an
+individual taker can overpay so every maker in their round
+sees the same effective fee, but the makers' actual
+advertised offer policies still apply to *other* takers'
+rounds and the fingerprint is reconstructed across the
+corpus. The mitigation lives with the makers, not with any
+individual taker.
 The simulator
 ([§9.3](#countermeasure-simulator-evaluation)) identifies the mitigation: **fee-policy
 homogenization** (`uniform_fee`, every maker on the reference
